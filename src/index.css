@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+/* ===== 커스텀 스타일 ===== */
+
+.neon-glow {
+  box-shadow: 0 0 20px rgba(0, 229, 229, 0.15),
+    inset 0 0 20px rgba(0, 229, 229, 0.05);
+}
+
+.neon-border {
+  border: 1px solid rgba(0, 229, 229, 0.4);
+}
+
+.neon-text {
+  text-shadow: 0 0 10px rgba(0, 229, 229, 0.6);
+}
+
+.font-display {
+  font-family: "Orbitron", sans-serif;
+  letter-spacing: 0.05em;
+}
+
+.scan-line::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #00e5e5, transparent);
+}
+
+.grid-bg {
+  background-image: linear-gradient(
+      rgba(0, 229, 229, 0.03) 1px,
+      transparent 1px
+    ),
+    linear-gradient(90deg, rgba(0, 229, 229, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 20px rgba(0, 229, 229, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(0, 229, 229, 0.4);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}

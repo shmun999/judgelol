@@ -1,4 +1,4 @@
-const BASE_URL = "http://43.203.125.26/api";
+const BASE_URL = "https://judgelol.com/api";
 
 // 게시글 목록
 export const getPosts = () =>

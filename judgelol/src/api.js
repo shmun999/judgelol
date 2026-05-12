@@ -59,3 +59,8 @@ export const deleteComment = (commentId, userEmail) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user_email: userEmail }),
   }).then((r) => r.json());
+
+export const getSummonerGames = (gameName, tagLine) =>
+  fetch(
+    `${BASE_URL}/riot/summoner?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`
+  ).then((r) => r.json());

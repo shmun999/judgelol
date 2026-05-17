@@ -100,7 +100,7 @@ app.get("/api/users/posts", (req, res) => {
     ORDER BY p.created_at DESC
   `).all(email);
 
-  res.json(posts.map(p => ({ ...p, game_data: p.game_data ? JSON.parse(p.game_data) : null })));
+  res.json(posts.map(p => ({ ...p, gameData: p.game_data ? JSON.parse(p.game_data) : null })));
 });
 
 // ─── 내 댓글 조회 ────────────────────────────────────
@@ -132,7 +132,7 @@ app.get("/api/posts", (req, res) => {
 
   const result = posts.map((post) => ({
     ...post,
-    game_data: post.game_data ? JSON.parse(post.game_data) : null,
+    gameData: post.game_data ? JSON.parse(post.game_data) : null,
     votes: db.prepare("SELECT * FROM vote_options WHERE post_id = ?").all(post.id),
   }));
 
@@ -157,7 +157,7 @@ app.get("/api/posts/:id", (req, res) => {
 
   res.json({
     ...post,
-    game_data: post.game_data ? JSON.parse(post.game_data) : null,
+    gameData: post.game_data ? JSON.parse(post.game_data) : null,
     votes,
     comments,
     my_voted_option_id: myVote ? myVote.option_id : null,

@@ -175,8 +175,8 @@ app.post("/api/posts", (req, res) => {
 
   const db = getDB();
   const result = db.prepare(`
-    INSERT INTO posts (title, description, youtube_url, author, author_email, tier, game_data)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO posts (title, description, youtube_url, author, author_email, tier, game_data, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   `).run(title, description, youtube_url || null, author || "익명", author_email || null, tier || "UNRANKED", gameData ? JSON.stringify(gameData) : null);
 
   const postId = result.lastInsertRowid;
@@ -270,8 +270,8 @@ app.post("/api/posts/:id/comments", (req, res) => {
   if (!post) return res.status(404).json({ error: "게시글을 찾을 수 없습니다." });
 
   const result = db.prepare(`
-    INSERT INTO comments (post_id, author, author_email, tier, content)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO comments (post_id, author, author_email, tier, content, created_at)
+    VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   `).run(postId, author || "익명", author_email || null, tier || "UNRANKED", content);
 
   res.json({ id: result.lastInsertRowid, message: "댓글이 등록되었습니다." });

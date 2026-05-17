@@ -66,26 +66,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 통계 */}
-      <section className="grid grid-cols-3 gap-4">
-        {[
-          { label: "총 판정 수", value: posts.length, icon: Gavel, color: "text-blue-500", bg: "bg-blue-50" },
-          { label: "총 투표 수", value: posts.reduce((acc, p) => acc + (p.votes || []).reduce((a, b) => a + b.count, 0), 0), icon: Trophy, color: "text-orange-500", bg: "bg-orange-50" },
-          { label: "총 댓글 수", value: posts.reduce((acc, p) => acc + (p.comment_count || 0), 0), icon: User, color: "text-cyan-500", bg: "bg-cyan-50" },
-        ].map((stat, i) => (
-          <div key={i} className="bg-white rounded-xl p-5 border border-slate-200 flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-lg ${stat.bg} flex items-center justify-center`}>
-              <stat.icon className={`w-5 h-5 ${stat.color}`} />
-            </div>
-            <div>
-              <div className="font-display font-black text-2xl text-slate-800">
-                {loading ? "..." : stat.value.toLocaleString()}
-              </div>
-              <div className="text-xs text-slate-400 mt-0.5">{stat.label}</div>
-            </div>
-          </div>
-        ))}
-      </section>
+
 
       {/* HOT 판정 */}
       <section>

@@ -8,7 +8,6 @@ export default function Header({ isLoggedIn, userName, userPicture }) {
   const navItems = [
     { to: "/", label: "홈" },
     { to: "/board", label: "법정" },
-    { to: "/ranking", label: "랭킹" },
     { to: "/shop", label: "상점" },
   ];
 

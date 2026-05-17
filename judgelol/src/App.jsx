@@ -9,7 +9,9 @@ import DetailPage from "./pages/DetailPage";
 import LoginPage from "./pages/LoginPage";
 import WritePage from "./pages/WritePage";
 import ComingSoonPage from "./pages/ComingSoonPage";
-import SettingPage from "./pages/SettingPage";
+import MyPage from "./pages/MyPage";
+
+const BASE_URL = "https://judgelol.com/api";
 
 export default function App() {
   const savedUser = JSON.parse(localStorage.getItem("user") || "null");
@@ -19,6 +21,7 @@ export default function App() {
   const [userEmail, setUserEmail] = useState(savedUser?.email || "");
   const [userPicture, setUserPicture] = useState(savedUser?.picture || "");
   const [isAdmin, setIsAdmin] = useState(savedUser?.email === "keomjongseol@gmail.com");
+  const [points, setPoints] = useState(savedUser?.points ?? 0);
 
   const handleLogout = () => {
     localStorage.removeItem("user");
@@ -27,6 +30,26 @@ export default function App() {
     setUserEmail("");
     setUserPicture("");
     setIsAdmin(false);
+    setPoints(0);
+  };
+
+  const handleLogin = async (name, email, picture) => {
+    // 백엔드에 유저 등록 및 포인트 조회
+    const res = await fetch(`${BASE_URL}/users/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, name, picture }),
+    });
+    const data = await res.json();
+    const userPoints = data.points ?? 0;
+
+    localStorage.setItem("user", JSON.stringify({ name, email, picture, points: userPoints }));
+    setIsLoggedIn(true);
+    setUserName(name);
+    setUserEmail(email);
+    setUserPicture(picture);
+    setIsAdmin(email === "keomjongseol@gmail.com");
+    setPoints(userPoints);
   };
 
   return (
@@ -44,7 +67,7 @@ export default function App() {
           rel="stylesheet"
         />
 
-        <Header isLoggedIn={isLoggedIn} userName={userName} userPicture={userPicture} />
+        <Header isLoggedIn={isLoggedIn} userName={userName} userPicture={userPicture} points={points} />
 
         <main className="max-w-7xl mx-auto px-6 py-8">
           <Routes>
@@ -52,23 +75,20 @@ export default function App() {
             <Route path="/board" element={<PostsPage />} />
             <Route path="/board/:id" element={<DetailPage isLoggedIn={isLoggedIn} userName={userName} userEmail={userEmail} isAdmin={isAdmin} />} />
             <Route path="/write" element={<WritePage isLoggedIn={isLoggedIn} userName={userName} />} />
-            <Route path="/ranking" element={<ComingSoonPage title="랭킹" />} />
             <Route path="/shop" element={<ComingSoonPage title="상점" />} />
-            <Route path="/setting" element={<SettingPage userName={userName} userEmail={userEmail} userPicture={userPicture} onLogout={handleLogout} />} />
+            <Route path="/mypage" element={
+              <MyPage
+                userName={userName}
+                userEmail={userEmail}
+                userPicture={userPicture}
+                points={points}
+                setPoints={setPoints}
+                onLogout={handleLogout}
+              />}
+            />
             <Route
               path="/login"
-              element={
-                <LoginPage
-                  onLogin={(name, email, picture) => {
-                    localStorage.setItem("user", JSON.stringify({ name, email, picture }));
-                    setIsLoggedIn(true);
-                    setUserName(name);
-                    setUserEmail(email);
-                    setUserPicture(picture);
-                    setIsAdmin(email === "keomjongseol@gmail.com");
-                  }}
-                />
-              }
+              element={<LoginPage onLogin={handleLogin} />}
             />
           </Routes>
         </main>

@@ -5,11 +5,120 @@ const { getDB } = require("./db");
 const app = express();
 const PORT = 3001;
 
-// ─── 관리자 이메일 ───────────────────────────────────
 const ADMIN_EMAILS = ["keomjongseol@gmail.com"];
 
 app.use(cors());
 app.use(express.json());
+
+// ─── 유저 등록 / 조회 ────────────────────────────────
+app.post("/api/users/login", (req, res) => {
+  const { email, name, picture } = req.body;
+  if (!email || !name) return res.status(400).json({ error: "이메일과 이름이 필요합니다." });
+
+  const db = getDB();
+  const existing = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
+
+  if (!existing) {
+    db.prepare("INSERT INTO users (email, name, picture, points) VALUES (?, ?, ?, 0)").run(email, name, picture || null);
+  } else if (picture) {
+    db.prepare("UPDATE users SET picture = ? WHERE email = ?").run(picture, email);
+  }
+
+  const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
+  res.json({ points: user.points, riot_account: user.riot_account });
+});
+
+// ─── 포인트 조회 ────────────────────────────────────
+app.get("/api/users/points", (req, res) => {
+  const { email } = req.query;
+  if (!email) return res.status(400).json({ error: "이메일이 필요합니다." });
+
+  const db = getDB();
+  const user = db.prepare("SELECT points FROM users WHERE email = ?").get(email);
+  if (!user) return res.status(404).json({ error: "유저를 찾을 수 없습니다." });
+
+  res.json({ points: user.points });
+});
+
+// ─── 출석 체크 ──────────────────────────────────────
+app.post("/api/users/attendance", (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "이메일이 필요합니다." });
+
+  const db = getDB();
+
+  // 한국 시간 기준 오늘 날짜
+  const koreaDate = new Date().toLocaleDateString("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).replace(/\. /g, "-").replace(".", "");
+
+  const existing = db.prepare("SELECT * FROM attendance WHERE user_email = ? AND date = ?").get(email, koreaDate);
+  if (existing) return res.status(400).json({ error: "이미 출석을 하였습니다!" });
+
+  db.prepare("INSERT INTO attendance (user_email, date) VALUES (?, ?)").run(email, koreaDate);
+  db.prepare("UPDATE users SET points = points + 10 WHERE email = ?").run(email);
+
+  const user = db.prepare("SELECT points FROM users WHERE email = ?").get(email);
+  res.json({ message: "출석 체크 되었습니다!", points: user.points });
+});
+
+// ─── 라이엇 계정 연동 ────────────────────────────────
+app.post("/api/users/riot", (req, res) => {
+  const { email, gameName, tagLine } = req.body;
+  if (!email || !gameName || !tagLine) return res.status(400).json({ error: "필수 정보가 없습니다." });
+
+  const db = getDB();
+  const riotAccount = JSON.stringify({ gameName, tagLine });
+  db.prepare("UPDATE users SET riot_account = ? WHERE email = ?").run(riotAccount, email);
+
+  res.json({ message: "라이엇 계정이 연동되었습니다.", gameName, tagLine });
+});
+
+// ─── 라이엇 계정 해제 ────────────────────────────────
+app.delete("/api/users/riot", (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "이메일이 필요합니다." });
+
+  const db = getDB();
+  db.prepare("UPDATE users SET riot_account = NULL WHERE email = ?").run(email);
+  res.json({ message: "라이엇 계정 연동이 해제되었습니다." });
+});
+
+// ─── 내 게시글 조회 ──────────────────────────────────
+app.get("/api/users/posts", (req, res) => {
+  const { email } = req.query;
+  if (!email) return res.status(400).json({ error: "이메일이 필요합니다." });
+
+  const db = getDB();
+  const posts = db.prepare(`
+    SELECT p.*, (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) as comment_count
+    FROM posts p
+    WHERE p.author_email = ?
+    ORDER BY p.created_at DESC
+  `).all(email);
+
+  res.json(posts.map(p => ({ ...p, game_data: p.game_data ? JSON.parse(p.game_data) : null })));
+});
+
+// ─── 내 댓글 조회 ────────────────────────────────────
+app.get("/api/users/comments", (req, res) => {
+  const { email } = req.query;
+  if (!email) return res.status(400).json({ error: "이메일이 필요합니다." });
+
+  const db = getDB();
+  const comments = db.prepare(`
+    SELECT c.*, p.title as post_title
+    FROM comments c
+    JOIN posts p ON c.post_id = p.id
+    WHERE c.author_email = ?
+    ORDER BY c.created_at DESC
+  `).all(email);
+
+  res.json(comments);
+});
 
 // ─── 게시글 목록 조회 ───────────────────────────────
 app.get("/api/posts", (req, res) => {
@@ -38,19 +147,11 @@ app.get("/api/posts/:id", (req, res) => {
   const post = db.prepare("SELECT * FROM posts WHERE id = ?").get(id);
   if (!post) return res.status(404).json({ error: "게시글을 찾을 수 없습니다." });
 
-  // 조회수 증가
   db.prepare("UPDATE posts SET views = views + 1 WHERE id = ?").run(id);
 
   const userEmail = req.query.user_email;
-
-  const myVote = userEmail
-    ? db.prepare("SELECT * FROM votes WHERE post_id = ? AND user_email = ?").get(id, userEmail)
-    : null;
-
-  const myLike = userEmail
-    ? db.prepare("SELECT * FROM post_likes WHERE post_id = ? AND user_email = ?").get(id, userEmail)
-    : null;
-
+  const myVote = userEmail ? db.prepare("SELECT * FROM votes WHERE post_id = ? AND user_email = ?").get(id, userEmail) : null;
+  const myLike = userEmail ? db.prepare("SELECT * FROM post_likes WHERE post_id = ? AND user_email = ?").get(id, userEmail) : null;
   const votes = db.prepare("SELECT * FROM vote_options WHERE post_id = ?").all(id);
   const comments = db.prepare("SELECT * FROM comments WHERE post_id = ? ORDER BY created_at DESC").all(id);
 
@@ -73,22 +174,12 @@ app.post("/api/posts", (req, res) => {
   }
 
   const db = getDB();
-
   const result = db.prepare(`
     INSERT INTO posts (title, description, youtube_url, author, author_email, tier, game_data)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    title,
-    description,
-    youtube_url || null,
-    author || "익명",
-    author_email || null,
-    tier || "UNRANKED",
-    gameData ? JSON.stringify(gameData) : null
-  );
+  `).run(title, description, youtube_url || null, author || "익명", author_email || null, tier || "UNRANKED", gameData ? JSON.stringify(gameData) : null);
 
   const postId = result.lastInsertRowid;
-
   const insertOption = db.prepare("INSERT INTO vote_options (post_id, label) VALUES (?, ?)");
   options.forEach((label) => insertOption.run(postId, label));
 
@@ -103,8 +194,9 @@ app.delete("/api/posts/:id", (req, res) => {
 
   const post = db.prepare("SELECT * FROM posts WHERE id = ?").get(id);
   if (!post) return res.status(404).json({ error: "게시글을 찾을 수 없습니다." });
-  const isAdminPost = ADMIN_EMAILS.includes(user_email);
-  if (!isAdminPost && post.author_email !== user_email) return res.status(403).json({ error: "삭제 권한이 없습니다." });
+
+  const isAdmin = ADMIN_EMAILS.includes(user_email);
+  if (!isAdmin && post.author_email !== user_email) return res.status(403).json({ error: "삭제 권한이 없습니다." });
 
   db.prepare("DELETE FROM posts WHERE id = ?").run(id);
   res.json({ message: "삭제되었습니다." });
@@ -145,12 +237,10 @@ app.post("/api/posts/:id/like", (req, res) => {
 
   if (existing) {
     if (existing.type === type) {
-      // 같은 버튼 다시 누르면 취소
       db.prepare("DELETE FROM post_likes WHERE post_id = ? AND user_email = ?").run(postId, user_email);
       const col = type === "like" ? "likes" : "dislikes";
       db.prepare(`UPDATE posts SET ${col} = ${col} - 1 WHERE id = ?`).run(postId);
     } else {
-      // 반대 버튼으로 전환
       db.prepare("UPDATE post_likes SET type = ? WHERE post_id = ? AND user_email = ?").run(type, postId, user_email);
       if (type === "like") {
         db.prepare("UPDATE posts SET likes = likes + 1, dislikes = dislikes - 1 WHERE id = ?").run(postId);
@@ -194,8 +284,9 @@ app.delete("/api/comments/:id", (req, res) => {
 
   const comment = db.prepare("SELECT * FROM comments WHERE id = ?").get(Number(req.params.id));
   if (!comment) return res.status(404).json({ error: "댓글을 찾을 수 없습니다." });
-  const isAdminComment = ADMIN_EMAILS.includes(user_email);
-  if (!isAdminComment && comment.author_email !== user_email) return res.status(403).json({ error: "삭제 권한이 없습니다." });
+
+  const isAdmin = ADMIN_EMAILS.includes(user_email);
+  if (!isAdmin && comment.author_email !== user_email) return res.status(403).json({ error: "삭제 권한이 없습니다." });
 
   db.prepare("DELETE FROM comments WHERE id = ?").run(Number(req.params.id));
   res.json({ message: "삭제되었습니다." });
@@ -226,8 +317,7 @@ app.post("/api/comments/:id/like", (req, res) => {
   res.json({ likes: updated.likes });
 });
 
-// ─── Mock Riot API ────────────────────────────────────────────────
-
+// ─── Mock Riot API ───────────────────────────────────
 const MOCK_CHAMPS = [
   { kr: "징크스", pos: "BOT" }, { kr: "야스오", pos: "MID" },
   { kr: "제드", pos: "MID" }, { kr: "케인", pos: "JGL" },
@@ -267,9 +357,7 @@ function generateWinProb(win, durationMin) {
     p = Math.max(8, Math.min(92, p));
     pts.push({ minute: m, prob: Math.round(p) });
   }
-  pts[pts.length - 1].prob = win
-    ? 82 + Math.floor(Math.random() * 12)
-    : 5 + Math.floor(Math.random() * 10);
+  pts[pts.length - 1].prob = win ? 82 + Math.floor(Math.random() * 12) : 5 + Math.floor(Math.random() * 10);
   return pts;
 }
 
@@ -288,9 +376,7 @@ function generateKeyEvents(win, durationMin) {
   }
   if (durationMin > 22) {
     const bt = [20, 24, 27, 30].find((m) => m < durationMin - 2 && !used.has(m));
-    if (bt) {
-      events.push({ minute: bt, type: "baron", label: "바론 나스", isOurs: win ? Math.random() > 0.35 : Math.random() > 0.7 });
-    }
+    if (bt) events.push({ minute: bt, type: "baron", label: "바론 나스", isOurs: win ? Math.random() > 0.35 : Math.random() > 0.7 });
   }
   return events.sort((a, b) => a.minute - b.minute);
 }
@@ -302,13 +388,7 @@ function detectKeyMoments(winProb) {
   for (let i = W; i < winProb.length - W; i++) {
     const change = winProb[i + W].prob - winProb[i - W].prob;
     if (Math.abs(change) >= 18) {
-      candidates.push({
-        minute: winProb[i].minute,
-        prob: winProb[i].prob,
-        change,
-        label: change > 0 ? "승률 급반전 ↑" : "승률 급하락 ↓",
-        isPositive: change > 0,
-      });
+      candidates.push({ minute: winProb[i].minute, prob: winProb[i].prob, change, label: change > 0 ? "승률 급반전 ↑" : "승률 급하락 ↓", isPositive: change > 0 });
     }
   }
   const deduped = [];
@@ -340,8 +420,7 @@ function generateTeams(playerChamp, playerPos) {
 
 app.get("/api/riot/summoner", (req, res) => {
   const { gameName, tagLine } = req.query;
-  if (!gameName || !tagLine)
-    return res.status(400).json({ error: "소환사 이름과 태그를 입력해주세요." });
+  if (!gameName || !tagLine) return res.status(400).json({ error: "소환사 이름과 태그를 입력해주세요." });
 
   const games = Array.from({ length: 7 }, (_, i) => {
     const champ = MOCK_CHAMPS[Math.floor(Math.random() * MOCK_CHAMPS.length)];
@@ -355,25 +434,17 @@ app.get("/api/riot/summoner", (req, res) => {
     const winProb = generateWinProb(win, durMin);
     return {
       gameId: `KR_${7234560000 + i * 1000 + Math.floor(Math.random() * 999)}`,
-      champion: champ.kr,
-      position: champ.pos,
-      positionKr: POS_KR[champ.pos],
-      win,
-      kills: k, deaths: d, assists: a,
+      champion: champ.kr, position: champ.pos, positionKr: POS_KR[champ.pos],
+      win, kills: k, deaths: d, assists: a,
       kda: ((k + a) / Math.max(1, d)).toFixed(2),
       cs: 120 + Math.floor(Math.random() * 200),
       visionScore: 8 + Math.floor(Math.random() * 40),
-      duration: durSec,
-      durationStr: `${durMin}:${String(durSec % 60).padStart(2, "0")}`,
+      duration: durSec, durationStr: `${durMin}:${String(durSec % 60).padStart(2, "0")}`,
       damageDealt: 12000 + Math.floor(Math.random() * 55000),
       date: new Date(Date.now() - i * 1000 * 60 * (60 + Math.floor(Math.random() * 120))).toISOString(),
-      summonerName: gameName,
-      tagLine,
-      winProbability: winProb,
-      keyEvents: generateKeyEvents(win, durMin),
-      keyMoments: detectKeyMoments(winProb),
-      blueTeam,
-      redTeam,
+      summonerName: gameName, tagLine,
+      winProbability: winProb, keyEvents: generateKeyEvents(win, durMin),
+      keyMoments: detectKeyMoments(winProb), blueTeam, redTeam,
     };
   });
 

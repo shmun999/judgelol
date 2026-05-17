@@ -1,7 +1,7 @@
-import { Gavel } from "lucide-react";
+import { Gavel, Coins } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
-export default function Header({ isLoggedIn, userName, userPicture }) {
+export default function Header({ isLoggedIn, userName, userPicture, points }) {
   const location = useLocation();
   const path = location.pathname;
 
@@ -28,18 +28,13 @@ export default function Header({ isLoggedIn, userName, userPicture }) {
 
         <nav className="hidden md:flex items-center gap-1">
           {navItems.map((item) => {
-            const isActive =
-              item.to === "/"
-                ? path === "/"
-                : path.startsWith(item.to);
+            const isActive = item.to === "/" ? path === "/" : path.startsWith(item.to);
             return (
               <Link
                 key={item.to}
                 to={item.to}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
-                  isActive
-                    ? "bg-blue-50 text-blue-600"
-                    : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${
+                  isActive ? "bg-blue-50 text-blue-600" : "text-slate-500 hover:text-slate-800 hover:bg-slate-50"
                 }`}
               >
                 {item.label}
@@ -50,22 +45,31 @@ export default function Header({ isLoggedIn, userName, userPicture }) {
 
         <div className="flex items-center gap-3">
           {isLoggedIn ? (
-            <Link
-              to="/setting"
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 hover:bg-slate-200 transition"
-            >
-              {userPicture ? (
-                <img src={userPicture} className="w-6 h-6 rounded-full" alt="프로필" />
-              ) : (
-                <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                  style={{ background: "linear-gradient(135deg, #3b82f6, #06b6d4)" }}
-                >
-                  {userName[0]?.toUpperCase()}
-                </div>
-              )}
-              <span className="text-sm font-semibold text-slate-700">{userName}</span>
-            </Link>
+            <>
+              {/* 포인트 표시 */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-50 border border-yellow-200">
+                <span className="text-sm">🪙</span>
+                <span className="text-sm font-bold text-yellow-700">내 포인트 : {points.toLocaleString()}</span>
+              </div>
+
+              {/* 마이페이지 */}
+              <Link
+                to="/mypage"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 hover:bg-slate-200 transition"
+              >
+                {userPicture ? (
+                  <img src={userPicture} className="w-6 h-6 rounded-full" alt="프로필" />
+                ) : (
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                    style={{ background: "linear-gradient(135deg, #3b82f6, #06b6d4)" }}
+                  >
+                    {userName[0]?.toUpperCase()}
+                  </div>
+                )}
+                <span className="text-sm font-semibold text-slate-700">{userName}</span>
+              </Link>
+            </>
           ) : (
             <Link
               to="/login"

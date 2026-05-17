@@ -52,6 +52,14 @@ export const likeComment = (commentId, userEmail) =>
     body: JSON.stringify({ user_email: userEmail }),
   }).then((r) => r.json());
 
+// 게시글 삭제
+export const deletePost = (postId, userEmail) =>
+  fetch(`${BASE_URL}/posts/${postId}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_email: userEmail }),
+  }).then((r) => r.json());
+
 // 댓글 삭제
 export const deleteComment = (commentId, userEmail) =>
   fetch(`${BASE_URL}/comments/${commentId}`, {

@@ -18,6 +18,7 @@ export default function App() {
   const [userName, setUserName] = useState(savedUser?.name || "");
   const [userEmail, setUserEmail] = useState(savedUser?.email || "");
   const [userPicture, setUserPicture] = useState(savedUser?.picture || "");
+  const [isAdmin, setIsAdmin] = useState(savedUser?.email === "keomjongseol@gmail.com");
 
   const handleLogout = () => {
     localStorage.removeItem("user");
@@ -25,6 +26,7 @@ export default function App() {
     setUserName("");
     setUserEmail("");
     setUserPicture("");
+    setIsAdmin(false);
   };
 
   return (
@@ -48,7 +50,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/board" element={<PostsPage />} />
-            <Route path="/board/:id" element={<DetailPage isLoggedIn={isLoggedIn} userName={userName} userEmail={userEmail} />} />
+            <Route path="/board/:id" element={<DetailPage isLoggedIn={isLoggedIn} userName={userName} userEmail={userEmail} isAdmin={isAdmin} />} />
             <Route path="/write" element={<WritePage isLoggedIn={isLoggedIn} userName={userName} />} />
             <Route path="/ranking" element={<ComingSoonPage title="랭킹" />} />
             <Route path="/shop" element={<ComingSoonPage title="상점" />} />
@@ -63,6 +65,7 @@ export default function App() {
                     setUserName(name);
                     setUserEmail(email);
                     setUserPicture(picture);
+                    setIsAdmin(email === "keomjongseol@gmail.com");
                   }}
                 />
               }

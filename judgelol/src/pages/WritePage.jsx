@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ChevronDown, ChevronUp, Search, Check } from "lucide-react";
 import { createPost, getSummonerGames } from "../api";
 
-export default function WritePage({ isLoggedIn, userName }) {
+export default function WritePage({ isLoggedIn, userName, userEmail }) {
   const navigate = useNavigate();
 
   // 로그인 체크
@@ -72,7 +72,7 @@ export default function WritePage({ isLoggedIn, userName }) {
     setSubmitting(true);
     try {
       const gameData = selectedGame ? { ...selectedGame } : null;
-      await createPost({ title, description, youtube_url: youtubeUrl, options, author: userName, gameData });
+      await createPost({ title, description, youtube_url: youtubeUrl, options, author: userName, author_email: userEmail, gameData });
       navigate("/board");
     } catch {
       alert("등록 중 오류가 발생했습니다.");

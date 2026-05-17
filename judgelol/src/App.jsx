@@ -74,7 +74,7 @@ export default function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/board" element={<PostsPage />} />
             <Route path="/board/:id" element={<DetailPage isLoggedIn={isLoggedIn} userName={userName} userEmail={userEmail} isAdmin={isAdmin} />} />
-            <Route path="/write" element={<WritePage isLoggedIn={isLoggedIn} userName={userName} />} />
+            <Route path="/write" element={<WritePage isLoggedIn={isLoggedIn} userName={userName} userEmail={userEmail} />} />
             <Route path="/shop" element={<ComingSoonPage title="상점" />} />
             <Route path="/mypage" element={
               <MyPage

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   ThumbsUp, ThumbsDown, MessageCircle, Send, Youtube, ArrowLeft, Trash2,
 } from "lucide-react";
-import { getPost, vote, createComment, likeComment, likePost, deleteComment } from "../api";
+import { getPost, vote, createComment, likeComment, likePost, deleteComment, deletePost } from "../api";
 import { TIER_COLORS } from "../data/mockData";
 
 // ── YouTube URL → embed URL 변환 유틸 ────────────────────────────
@@ -310,7 +310,7 @@ function GameInfoSection({ gameData }) {
   );
 }
 
-export default function DetailPage({ isLoggedIn, userName, userEmail }) {
+export default function DetailPage({ isLoggedIn, userName, userEmail, isAdmin }) {
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -380,6 +380,12 @@ export default function DetailPage({ isLoggedIn, userName, userEmail }) {
     }));
   };
 
+  const handleDeletePost = async () => {
+    if (!window.confirm("게시글을 삭제하시겠습니까?")) return;
+    await deletePost(post.id, userEmail);
+    navigate("/board");
+  };
+
   const handleDeleteComment = async (commentId) => {
     if (!window.confirm("댓글을 삭제하시겠습니까?")) return;
     await deleteComment(commentId, userEmail);
@@ -410,12 +416,22 @@ export default function DetailPage({ isLoggedIn, userName, userEmail }) {
 
   return (
     <div className="max-w-3xl mx-auto space-y-5">
-      <button
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-blue-600 font-semibold transition"
-      >
-        <ArrowLeft className="w-4 h-4" /> 목록으로
-      </button>
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-blue-600 font-semibold transition"
+        >
+          <ArrowLeft className="w-4 h-4" /> 목록으로
+        </button>
+        {(post.author_email === userEmail || isAdmin) && (
+          <button
+            onClick={handleDeletePost}
+            className="flex items-center gap-1.5 text-sm text-red-400 hover:text-red-600 font-semibold transition"
+          >
+            <Trash2 className="w-4 h-4" /> 게시글 삭제
+          </button>
+        )}
+      </div>
 
       {/* 제목 */}
       <div className="bg-white rounded-xl border border-slate-200 p-6">
@@ -577,7 +593,7 @@ export default function DetailPage({ isLoggedIn, userName, userEmail }) {
                   >
                     <ThumbsUp className="w-3 h-3" /> {c.likes}
                   </button>
-                  {c.author_email === userEmail && (
+                  {(c.author_email === userEmail || isAdmin) && (
                     <button
                       onClick={() => handleDeleteComment(c.id)}
                       className="hover:text-red-400 flex items-center gap-1 transition"

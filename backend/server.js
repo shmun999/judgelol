@@ -5,6 +5,9 @@ const { getDB } = require("./db");
 const app = express();
 const PORT = 3001;
 
+// ─── 관리자 이메일 ───────────────────────────────────
+const ADMIN_EMAILS = ["keomjongseol@gmail.com"];
+
 app.use(cors());
 app.use(express.json());
 
@@ -100,7 +103,8 @@ app.delete("/api/posts/:id", (req, res) => {
 
   const post = db.prepare("SELECT * FROM posts WHERE id = ?").get(id);
   if (!post) return res.status(404).json({ error: "게시글을 찾을 수 없습니다." });
-  if (post.author_email !== user_email) return res.status(403).json({ error: "삭제 권한이 없습니다." });
+  const isAdminPost = ADMIN_EMAILS.includes(user_email);
+  if (!isAdminPost && post.author_email !== user_email) return res.status(403).json({ error: "삭제 권한이 없습니다." });
 
   db.prepare("DELETE FROM posts WHERE id = ?").run(id);
   res.json({ message: "삭제되었습니다." });
@@ -190,7 +194,8 @@ app.delete("/api/comments/:id", (req, res) => {
 
   const comment = db.prepare("SELECT * FROM comments WHERE id = ?").get(Number(req.params.id));
   if (!comment) return res.status(404).json({ error: "댓글을 찾을 수 없습니다." });
-  if (comment.author_email !== user_email) return res.status(403).json({ error: "삭제 권한이 없습니다." });
+  const isAdminComment = ADMIN_EMAILS.includes(user_email);
+  if (!isAdminComment && comment.author_email !== user_email) return res.status(403).json({ error: "삭제 권한이 없습니다." });
 
   db.prepare("DELETE FROM comments WHERE id = ?").run(Number(req.params.id));
   res.json({ message: "삭제되었습니다." });

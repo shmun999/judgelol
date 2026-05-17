@@ -24,7 +24,7 @@ function initTables() {
       picture TEXT,
       points INTEGER DEFAULT 0,
       riot_account TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
 
     CREATE TABLE IF NOT EXISTS attendance (
@@ -46,7 +46,7 @@ function initTables() {
       likes INTEGER DEFAULT 0,
       dislikes INTEGER DEFAULT 0,
       game_data TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
 
     CREATE TABLE IF NOT EXISTS vote_options (
@@ -74,7 +74,7 @@ function initTables() {
       tier TEXT DEFAULT 'UNRANKED',
       content TEXT NOT NULL,
       likes INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now')),
+      created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
       FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
     );
 

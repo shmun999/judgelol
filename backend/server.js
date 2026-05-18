@@ -47,18 +47,18 @@ app.post("/api/users/attendance", (req, res) => {
 
   const db = getDB();
 
-  // 한국 시간 기준 오늘 날짜
-  const koreaDate = new Date().toLocaleDateString("ko-KR", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).replace(/\. /g, "-").replace(".", "");
+  // 한국 시간 기준 오늘 날짜 (0시 기준)
+  const now = new Date();
+  const koreaDate = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  const yyyy = koreaDate.getFullYear();
+  const mm = String(koreaDate.getMonth() + 1).padStart(2, "0");
+  const dd = String(koreaDate.getDate()).padStart(2, "0");
+  const koreaDateStr = `${yyyy}-${mm}-${dd}`;
 
-  const existing = db.prepare("SELECT * FROM attendance WHERE user_email = ? AND date = ?").get(email, koreaDate);
+  const existing = db.prepare("SELECT * FROM attendance WHERE user_email = ? AND date = ?").get(email, koreaDateStr);
   if (existing) return res.status(400).json({ error: "이미 출석을 하였습니다!" });
 
-  db.prepare("INSERT INTO attendance (user_email, date) VALUES (?, ?)").run(email, koreaDate);
+  db.prepare("INSERT INTO attendance (user_email, date) VALUES (?, ?)").run(email, koreaDateStr);
   db.prepare("UPDATE users SET points = points + 10 WHERE email = ?").run(email);
 
   const user = db.prepare("SELECT points FROM users WHERE email = ?").get(email);
@@ -195,11 +195,52 @@ app.delete("/api/posts/:id", (req, res) => {
   const post = db.prepare("SELECT * FROM posts WHERE id = ?").get(id);
   if (!post) return res.status(404).json({ error: "게시글을 찾을 수 없습니다." });
 
-  const isAdmin = ADMIN_EMAILS.includes(user_email);
-  if (!isAdmin && post.author_email !== user_email) return res.status(403).json({ error: "삭제 권한이 없습니다." });
+  const isAdminDelete = ADMIN_EMAILS.includes(user_email);
+  if (!isAdminDelete) return res.status(403).json({ error: "관리자만 게시글을 삭제할 수 있습니다." });
 
   db.prepare("DELETE FROM posts WHERE id = ?").run(id);
   res.json({ message: "삭제되었습니다." });
+});
+
+
+// ─── 판정 완료 (관리자 전용) ──────────────────────────
+app.post("/api/posts/:id/close", async (req, res) => {
+  const { user_email, final_opinion, correct_option_id } = req.body;
+  if (!ADMIN_EMAILS.includes(user_email)) {
+    return res.status(403).json({ error: "관리자만 판정을 완료할 수 있습니다." });
+  }
+  if (!final_opinion || !correct_option_id) {
+    return res.status(400).json({ error: "최종의견과 정답 항목을 선택해주세요." });
+  }
+
+  const db = getDB();
+  const id = Number(req.params.id);
+
+  const post = db.prepare("SELECT * FROM posts WHERE id = ?").get(id);
+  if (!post) return res.status(404).json({ error: "게시글을 찾을 수 없습니다." });
+  if (post.is_closed) return res.status(400).json({ error: "이미 판정이 완료된 게시글입니다." });
+
+  // 판정 완료 처리
+  db.prepare(
+    "UPDATE posts SET is_closed = 1, final_opinion = ?, correct_option_id = ? WHERE id = ?"
+  ).run(final_opinion, Number(correct_option_id), id);
+
+  // 정답 투표자에게 100포인트 지급
+  const correctVoters = db.prepare(
+    "SELECT user_email FROM votes WHERE post_id = ? AND option_id = ?"
+  ).all(id, Number(correct_option_id));
+
+  for (const voter of correctVoters) {
+    const user = db.prepare("SELECT * FROM users WHERE email = ?").get(voter.user_email);
+    if (user) {
+      db.prepare("UPDATE users SET points = points + 100 WHERE email = ?").run(voter.user_email);
+    }
+  }
+
+  res.json({
+    message: `판정이 완료되었습니다. ${correctVoters.length}명에게 100포인트가 지급되었습니다.`,
+    rewarded: correctVoters.length,
+  });
 });
 
 // ─── 투표 ───────────────────────────────────────────
@@ -209,6 +250,9 @@ app.post("/api/posts/:id/vote", (req, res) => {
 
   const db = getDB();
   const postId = Number(req.params.id);
+
+  const postForVote = db.prepare("SELECT * FROM posts WHERE id = ?").get(postId);
+  if (postForVote?.is_closed) return res.status(400).json({ error: "판정이 완료된 게시글입니다." });
 
   const alreadyVoted = db.prepare("SELECT * FROM votes WHERE post_id = ? AND user_email = ?").get(postId, user_email);
   if (alreadyVoted) return res.status(400).json({ error: "이미 투표하셨습니다." });
@@ -268,6 +312,7 @@ app.post("/api/posts/:id/comments", (req, res) => {
 
   const post = db.prepare("SELECT * FROM posts WHERE id = ?").get(postId);
   if (!post) return res.status(404).json({ error: "게시글을 찾을 수 없습니다." });
+  if (post.is_closed) return res.status(400).json({ error: "판정이 완료된 게시글입니다." });
 
   const result = db.prepare(`
     INSERT INTO comments (post_id, author, author_email, tier, content, created_at)
@@ -508,9 +553,11 @@ app.get("/api/riot/summoner", async (req, res) => {
             body: JSON.stringify({ frames: frameFeatures }),
           });
           const predictData = await predictRes.json();
-          winProbability = (predictData.win_probability || []).map(d => ({
+          const rawProbs = predictData.win_probability || [];
+          // 레드팀이면 승률 뒤집기 (블루팀 승률 → 내 팀 승률)
+          winProbability = rawProbs.map(d => ({
             minute: d.minute,
-            prob: Math.round(d.prob),
+            prob: isBlueTeam ? Math.round(d.prob) : Math.round(100 - d.prob),
           }));
         } catch (e) {
           console.error("LSTM 예측 실패:", e.message);
@@ -533,7 +580,7 @@ app.get("/api/riot/summoner", async (req, res) => {
           summonerName: gameName,
           tagLine,
           winProbability,
-          keyEvents: keyEvents.slice(0, 10),
+          keyEvents: keyEvents,  // 전체 이벤트
           keyMoments,
           blueTeam,
           redTeam,

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   ThumbsUp, ThumbsDown, MessageCircle, Send, Youtube, ArrowLeft, Trash2,
 } from "lucide-react";
-import { getPost, vote, createComment, likeComment, likePost, deleteComment, deletePost } from "../api";
+import { getPost, vote, createComment, likeComment, likePost, deleteComment, deletePost, closePost } from "../api";
 import { TIER_COLORS } from "../data/mockData";
 
 // ── YouTube URL → embed URL 변환 유틸 ────────────────────────────
@@ -153,7 +153,7 @@ function WinProbChart({ data, keyEvents, keyMoments }) {
 
       {/* 범례 */}
       <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-500 px-1">
-        {(keyEvents || []).map((e, i) => (
+        {(keyEvents || []).slice().sort((a,b) => a.minute - b.minute).map((e, i) => (
           <div key={i} className="flex items-center gap-1">
             <span className="inline-block w-2.5 h-2.5 rounded-sm"
               style={{ background: e.isOurs ? "#22c55e" : "#ef4444" }} />
@@ -319,6 +319,10 @@ export default function DetailPage({ isLoggedIn, userName, userEmail, isAdmin })
   const [votedFor, setVotedFor] = useState(null);
   const [myLike, setMyLike] = useState(null);
   const [newComment, setNewComment] = useState("");
+  const [finalOpinion, setFinalOpinion] = useState("");
+  const [correctOptionId, setCorrectOptionId] = useState(null);
+  const [closing, setClosing] = useState(false);
+  const [closeMsg, setCloseMsg] = useState("");
 
   useEffect(() => {
     getPost(id, userEmail)
@@ -395,6 +399,24 @@ export default function DetailPage({ isLoggedIn, userName, userEmail, isAdmin })
     }));
   };
 
+  const handleClosePost = async () => {
+    if (!finalOpinion.trim() || !correctOptionId) {
+      setCloseMsg("최종의견과 정답 항목을 모두 입력해주세요.");
+      return;
+    }
+    if (!window.confirm("판정을 완료하시겠습니까? 완료 후에는 되돌릴 수 없습니다.")) return;
+    setClosing(true);
+    const result = await closePost(post.id, userEmail, finalOpinion, correctOptionId);
+    setCloseMsg(result.message || "판정이 완료되었습니다.");
+    setPost((prev) => ({
+      ...prev,
+      is_closed: 1,
+      final_opinion: finalOpinion,
+      correct_option_id: Number(correctOptionId),
+    }));
+    setClosing(false);
+  };
+
   if (loading) return <div className="text-center py-20 text-slate-400">불러오는 중...</div>;
   if (!post) return <div className="text-center py-20 text-slate-400">게시글을 찾을 수 없습니다.</div>;
 
@@ -423,7 +445,7 @@ export default function DetailPage({ isLoggedIn, userName, userEmail, isAdmin })
         >
           <ArrowLeft className="w-4 h-4" /> 목록으로
         </button>
-        {(post.author_email === userEmail || isAdmin) && (
+        {isAdmin && (
           <button
             onClick={handleDeletePost}
             className="flex items-center gap-1.5 text-sm text-red-400 hover:text-red-600 font-semibold transition"
@@ -494,17 +516,21 @@ export default function DetailPage({ isLoggedIn, userName, userEmail, isAdmin })
             return (
               <div key={v.id}>
                 <div className="flex justify-between items-baseline mb-1.5">
-                  <span className={`text-sm font-bold ${isVoted ? "text-blue-600" : "text-slate-700"}`}>
-                    {v.label} {isVoted && "✓"}
+                  <span className={`text-sm font-bold ${isVoted ? "text-blue-600" : post.correct_option_id === v.id ? "text-green-600" : "text-slate-700"}`}>
+                    {v.label} {isVoted && "✓"} {post.correct_option_id === v.id && post.is_closed ? "✅ 정답" : ""}
                   </span>
-                  <span className="text-sm text-slate-500">{v.count}표 ({pct.toFixed(0)}%)</span>
+                  {(isAdmin || post.is_closed) && (
+                    <span className="text-sm text-slate-500">{v.count}표 ({pct.toFixed(0)}%)</span>
+                  )}
                 </div>
                 <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden mb-2">
-                  <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: barColors[i % barColors.length] }} />
+                  <div className="h-full rounded-full transition-all duration-700"
+                    style={{ width: (isAdmin || post.is_closed) ? `${pct}%` : isVoted ? "100%" : "0%",
+                             background: post.correct_option_id === v.id && post.is_closed ? "linear-gradient(90deg, #22c55e, #16a34a)" : barColors[i % barColors.length] }} />
                 </div>
                 <button
                   onClick={() => handleVote(v)}
-                  disabled={votedFor !== null}
+                  disabled={votedFor !== null || post.is_closed}
                   className={`w-full py-2 rounded-lg text-sm font-bold transition border ${
                     votedFor === null
                       ? "border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50"
@@ -513,7 +539,7 @@ export default function DetailPage({ isLoggedIn, userName, userEmail, isAdmin })
                       : "border-slate-100 text-slate-300 cursor-not-allowed"
                   }`}
                 >
-                  {isVoted ? "✓ 투표 완료" : votedFor !== null ? "—" : !isLoggedIn ? "🔒 로그인 후 투표 가능" : "투표하기"}
+                  {post.is_closed ? "⚖️ 판정 완료" : isVoted ? "✓ 투표 완료" : votedFor !== null ? "—" : !isLoggedIn ? "🔒 로그인 후 투표 가능" : "투표하기"}
                 </button>
               </div>
             );
@@ -535,13 +561,78 @@ export default function DetailPage({ isLoggedIn, userName, userEmail, isAdmin })
         </div>
       </div>
 
+
+      {/* 최종 판정 결과 */}
+      {post.is_closed && post.final_opinion && (
+        <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-200 p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">⚖️</span>
+            <h2 className="font-bold text-blue-800">최종 판정</h2>
+            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full font-bold">판정 완료</span>
+          </div>
+          <p className="text-slate-700 leading-relaxed">{post.final_opinion}</p>
+        </div>
+      )}
+
+      {/* 관리자 판정 완료 폼 */}
+      {isAdmin && !post.is_closed && (
+        <div className="bg-yellow-50 rounded-xl border border-yellow-200 p-6 space-y-4">
+          <h2 className="font-bold text-yellow-800 flex items-center gap-2">
+            🔑 관리자 판정
+          </h2>
+          <div>
+            <label className="block text-xs font-bold text-slate-600 mb-1.5">최종 의견</label>
+            <textarea
+              value={finalOpinion}
+              onChange={(e) => setFinalOpinion(e.target.value)}
+              placeholder="최종 판정 의견을 작성해주세요..."
+              rows={3}
+              className="w-full border border-slate-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-yellow-400 resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-600 mb-2">정답 항목 선택</label>
+            <div className="space-y-2">
+              {(post.votes || []).map((v) => (
+                <label key={v.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${
+                  correctOptionId === v.id ? "border-yellow-400 bg-yellow-100" : "border-slate-200 bg-white hover:bg-slate-50"
+                }`}>
+                  <input
+                    type="radio"
+                    name="correctOption"
+                    value={v.id}
+                    checked={correctOptionId === v.id}
+                    onChange={() => setCorrectOptionId(v.id)}
+                    className="accent-yellow-500"
+                  />
+                  <span className="font-semibold text-slate-700">{v.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          {closeMsg && (
+            <div className="text-sm font-semibold text-center py-2 rounded-lg bg-yellow-100 text-yellow-800">
+              {closeMsg}
+            </div>
+          )}
+          <button
+            onClick={handleClosePost}
+            disabled={closing}
+            className="w-full py-3 rounded-lg font-bold text-sm text-white transition hover:opacity-90 disabled:opacity-60"
+            style={{ background: "linear-gradient(135deg, #f59e0b, #ef4444)" }}
+          >
+            {closing ? "처리 중..." : "⚖️ 판정 완료하기"}
+          </button>
+        </div>
+      )}
+
       {/* 댓글 */}
       <div className="bg-white rounded-xl border border-slate-200 p-6">
         <h2 className="font-bold text-base text-slate-800 mb-4 flex items-center gap-2">
           <MessageCircle className="w-4 h-4 text-blue-500" />
           판관들의 의견 <span className="text-blue-500">{(post.comments || []).length}</span>
         </h2>
-        {isLoggedIn ? (
+        {isLoggedIn && !post.is_closed ? (
           <div className="flex gap-2 mb-6">
             <input
               value={newComment}
@@ -557,6 +648,10 @@ export default function DetailPage({ isLoggedIn, userName, userEmail, isAdmin })
             >
               <Send className="w-4 h-4" />
             </button>
+          </div>
+        ) : post.is_closed ? (
+          <div className="mb-6 p-4 rounded-lg border border-blue-100 bg-blue-50 text-center">
+            <p className="text-sm text-blue-500 font-semibold">⚖️ 판정이 완료되어 댓글을 작성할 수 없습니다.</p>
           </div>
         ) : (
           <div

@@ -46,6 +46,9 @@ function initTables() {
       likes INTEGER DEFAULT 0,
       dislikes INTEGER DEFAULT 0,
       game_data TEXT,
+      is_closed INTEGER DEFAULT 0,
+      final_opinion TEXT,
+      correct_option_id INTEGER,
       created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
 

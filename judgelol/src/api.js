@@ -72,3 +72,15 @@ export const getSummonerGames = (gameName, tagLine) =>
   fetch(
     `${BASE_URL}/riot/summoner?gameName=${encodeURIComponent(gameName)}&tagLine=${encodeURIComponent(tagLine)}`
   ).then((r) => r.json());
+
+// 판정 완료 (관리자)
+export const closePost = (postId, userEmail, finalOpinion, correctOptionId) =>
+  fetch(`${BASE_URL}/posts/${postId}/close`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      user_email: userEmail,
+      final_opinion: finalOpinion,
+      correct_option_id: correctOptionId,
+    }),
+  }).then((r) => r.json());

@@ -80,7 +80,7 @@ function WinProbChart({ data, keyEvents, keyMoments }) {
         {(keyEvents || []).map((e, i) => (
           <line key={i}
             x1={x(e.minute)} y1={pt} x2={x(e.minute)} y2={pt + ch}
-            stroke={e.isOurs ? "#22c55e" : "#ef4444"}
+            stroke={e.isBlue ? "#3b82f6" : "#ef4444"}
             strokeWidth="1" strokeDasharray="3,3" opacity="0.5"
           />
         ))}
@@ -156,8 +156,8 @@ function WinProbChart({ data, keyEvents, keyMoments }) {
         {(keyEvents || []).slice().sort((a,b) => a.minute - b.minute).map((e, i) => (
           <div key={i} className="flex items-center gap-1">
             <span className="inline-block w-2.5 h-2.5 rounded-sm"
-              style={{ background: e.isOurs ? "#22c55e" : "#ef4444" }} />
-            <span>{e.minute}분 {e.label}({e.isOurs ? "우리팀" : "상대팀"})</span>
+              style={{ background: e.isBlue ? "#3b82f6" : "#ef4444" }} />
+            <span>{e.minute}분 {e.label}({e.isBlue ? "블루팀" : "레드팀"})</span>
           </div>
         ))}
       </div>

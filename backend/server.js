@@ -482,6 +482,13 @@ app.get("/api/riot/summoner", async (req, res) => {
 
         const frameFeatures = [];
         const keyEvents = [];
+        let firstBloodDone = false;
+
+        // 참가자 ID → 챔피언명 맵
+        const pidToChamp = {};
+        for (const p of info.participants) {
+          pidToChamp[p.participantId] = p.championName;
+        }
 
         for (let minute = 0; minute < frames.length; minute++) {
           const frame = frames[minute];
@@ -503,6 +510,8 @@ app.get("/api/riot/summoner", async (req, res) => {
                 }
               }
             }
+
+            // 오브젝트 킬 이벤트
             if (event.type === "ELITE_MONSTER_KILL") {
               const isBlueKill = blueIds.includes(event.killerId);
               const monster = event.monsterType;
@@ -513,17 +522,37 @@ app.get("/api/riot/summoner", async (req, res) => {
                 else if (monster === "BARON_NASHOR") b_baron = 1;
               }
               const eMin = Math.floor((event.timestamp || 0) / 60000);
+              const monsterLabel = monster === "DRAGON" ? "드래곤" : monster === "BARON_NASHOR" ? "바론 나스" : monster === "RIFTHERALD" ? "전령" : monster === "HORDE" ? "협곡의 전령" : monster;
               keyEvents.push({
                 minute: eMin,
                 type: monster.toLowerCase(),
-                label: monster === "DRAGON" ? "드래곤" : monster === "BARON_NASHOR" ? "바론 나스" : monster === "RIFTHERALD" ? "전령" : monster,
-                isOurs: isBlueTeam ? isBlueKill : !isBlueKill,
+                label: monsterLabel,
+                isBlue: isBlueKill,
               });
             }
-            if (event.type === "CHAMPION_KILL" && minute < 5) {
+
+            // 챔피언 킬 이벤트
+            if (event.type === "CHAMPION_KILL") {
               const eMin = Math.floor((event.timestamp || 0) / 60000);
-              if (eMin <= 5) {
-                keyEvents.push({ minute: eMin, type: "firstBlood", label: "퍼스트 블러드", isOurs: blueIds.includes(event.killerId) === isBlueTeam });
+              const killerChamp = pidToChamp[event.killerId] || "?";
+              const victimChamp = pidToChamp[event.victimId] || "?";
+              const isBlueKill = blueIds.includes(event.killerId);
+
+              if (!firstBloodDone) {
+                firstBloodDone = true;
+                keyEvents.push({
+                  minute: eMin,
+                  type: "firstBlood",
+                  label: `퍼스트 블러드: ${killerChamp}→${victimChamp} 처치`,
+                  isBlue: isBlueKill,
+                });
+              } else {
+                keyEvents.push({
+                  minute: eMin,
+                  type: "kill",
+                  label: `${killerChamp}→${victimChamp} 처치`,
+                  isBlue: isBlueKill,
+                });
               }
             }
           }

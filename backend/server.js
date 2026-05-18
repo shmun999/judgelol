@@ -522,7 +522,7 @@ app.get("/api/riot/summoner", async (req, res) => {
                 else if (monster === "BARON_NASHOR") b_baron = 1;
               }
               const eMin = Math.floor((event.timestamp || 0) / 60000);
-              const monsterLabel = monster === "DRAGON" ? "드래곤" : monster === "BARON_NASHOR" ? "바론 나스" : monster === "RIFTHERALD" ? "전령" : monster === "HORDE" ? "협곡의 전령" : monster;
+              const monsterLabel = monster === "DRAGON" ? "드래곤" : monster === "BARON_NASHOR" ? "바론 나스" : monster === "RIFTHERALD" ? "전령" : monster === "HORDE" ? "유충" : monster;
               keyEvents.push({
                 minute: eMin,
                 type: monster.toLowerCase(),

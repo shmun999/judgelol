@@ -317,69 +317,24 @@ app.post("/api/comments/:id/like", (req, res) => {
   res.json({ likes: updated.likes });
 });
 
-// ─── Mock Riot API ───────────────────────────────────
-const MOCK_CHAMPS = [
-  { kr: "징크스", pos: "BOT" }, { kr: "야스오", pos: "MID" },
-  { kr: "제드", pos: "MID" }, { kr: "케인", pos: "JGL" },
-  { kr: "카이사", pos: "BOT" }, { kr: "세나", pos: "SUP" },
-  { kr: "리신", pos: "JGL" }, { kr: "나미", pos: "SUP" },
-  { kr: "갱플랭크", pos: "TOP" }, { kr: "그레이브즈", pos: "JGL" },
-  { kr: "르블랑", pos: "MID" }, { kr: "조이", pos: "MID" },
-  { kr: "렉사이", pos: "JGL" }, { kr: "바루스", pos: "BOT" },
-  { kr: "다리우스", pos: "TOP" }, { kr: "피오라", pos: "TOP" },
-  { kr: "라칸", pos: "SUP" }, { kr: "루시안", pos: "BOT" },
-  { kr: "에코", pos: "JGL" }, { kr: "오리아나", pos: "MID" },
-  { kr: "카르마", pos: "SUP" }, { kr: "아펠리오스", pos: "BOT" },
-];
+// ─── 실제 Riot API ───────────────────────────────────
+const fs = require("fs");
+const path = require("path");
 
-const POS_KR = { TOP: "탑", JGL: "정글", MID: "미드", BOT: "원딜", SUP: "서포터" };
-
-function generateWinProb(win, durationMin) {
-  const pts = [];
-  let p = 50;
-  const numSwings = 2 + Math.floor(Math.random() * 2);
-  const swingAt = [];
-  for (let i = 0; i < numSwings; i++) {
-    const m = Math.floor(6 + ((i + 1) * (durationMin - 8)) / (numSwings + 1));
-    const toWin = i % 2 === (win ? 1 : 0);
-    swingAt.push({ m, toWin });
+// .env에서 API 키 로드
+function getRiotApiKey() {
+  try {
+    const envPath = path.join(__dirname, ".env");
+    const env = fs.readFileSync(envPath, "utf-8");
+    const match = env.match(/RIOT_API_KEY=(.+)/);
+    return match ? match[1].trim() : null;
+  } catch {
+    return null;
   }
-  for (let m = 0; m <= durationMin; m++) {
-    const swing = swingAt.find((s) => Math.abs(s.m - m) <= 1);
-    if (swing) {
-      const force = 18 + Math.random() * 18;
-      p += swing.toWin ? force : -force;
-    } else {
-      p += (Math.random() - 0.49) * 5;
-    }
-    const progress = m / durationMin;
-    p += ((win ? 68 : 32) - p) * progress * 0.04;
-    p = Math.max(8, Math.min(92, p));
-    pts.push({ minute: m, prob: Math.round(p) });
-  }
-  pts[pts.length - 1].prob = win ? 82 + Math.floor(Math.random() * 12) : 5 + Math.floor(Math.random() * 10);
-  return pts;
 }
 
-function generateKeyEvents(win, durationMin) {
-  const events = [];
-  const used = new Set();
-  const fb = 2 + Math.floor(Math.random() * 3);
-  events.push({ minute: fb, type: "firstBlood", label: "퍼스트 블러드", isOurs: Math.random() > 0.4 });
-  used.add(fb);
-  let dc = 0;
-  for (const m of [5, 9, 13, 18, 23]) {
-    if (m < durationMin - 2 && dc < 3 && !used.has(m)) {
-      events.push({ minute: m, type: "dragon", label: `드래곤 ${++dc}`, isOurs: win ? Math.random() > 0.3 : Math.random() > 0.65 });
-      used.add(m);
-    }
-  }
-  if (durationMin > 22) {
-    const bt = [20, 24, 27, 30].find((m) => m < durationMin - 2 && !used.has(m));
-    if (bt) events.push({ minute: bt, type: "baron", label: "바론 나스", isOurs: win ? Math.random() > 0.35 : Math.random() > 0.7 });
-  }
-  return events.sort((a, b) => a.minute - b.minute);
-}
+const POS_KR = { TOP: "탑", JUNGLE: "정글", MIDDLE: "미드", BOTTOM: "원딜", UTILITY: "서포터" };
+const POS_EN = { TOP: "TOP", JUNGLE: "JGL", MIDDLE: "MID", BOTTOM: "BOT", UTILITY: "SUP" };
 
 function detectKeyMoments(winProb) {
   if (!winProb || winProb.length < 6) return [];
@@ -387,7 +342,7 @@ function detectKeyMoments(winProb) {
   const candidates = [];
   for (let i = W; i < winProb.length - W; i++) {
     const change = winProb[i + W].prob - winProb[i - W].prob;
-    if (Math.abs(change) >= 18) {
+    if (Math.abs(change) >= 10) {
       candidates.push({ minute: winProb[i].minute, prob: winProb[i].prob, change, label: change > 0 ? "승률 급반전 ↑" : "승률 급하락 ↓", isPositive: change > 0 });
     }
   }
@@ -402,55 +357,200 @@ function detectKeyMoments(winProb) {
   return deduped.sort((a, b) => a.minute - b.minute);
 }
 
-function generateTeams(playerChamp, playerPos) {
-  const roles = ["TOP", "JGL", "MID", "BOT", "SUP"];
-  const blueTeam = roles.map((role) => {
-    if (role === playerPos) return { champion: playerChamp, role: POS_KR[role], isPlayer: true };
-    const candidates = MOCK_CHAMPS.filter((c) => c.pos === role);
-    const champ = candidates[Math.floor(Math.random() * candidates.length)] || MOCK_CHAMPS[0];
-    return { champion: champ.kr, role: POS_KR[role], isPlayer: false };
-  });
-  const redTeam = roles.map((role) => {
-    const candidates = MOCK_CHAMPS.filter((c) => c.pos === role);
-    const champ = candidates[Math.floor(Math.random() * candidates.length)] || MOCK_CHAMPS[0];
-    return { champion: champ.kr, role: POS_KR[role], isPlayer: false };
-  });
-  return { blueTeam, redTeam };
-}
-
-app.get("/api/riot/summoner", (req, res) => {
+app.get("/api/riot/summoner", async (req, res) => {
   const { gameName, tagLine } = req.query;
   if (!gameName || !tagLine) return res.status(400).json({ error: "소환사 이름과 태그를 입력해주세요." });
 
-  const games = Array.from({ length: 7 }, (_, i) => {
-    const champ = MOCK_CHAMPS[Math.floor(Math.random() * MOCK_CHAMPS.length)];
-    const win = Math.random() > 0.45;
-    const k = Math.floor(Math.random() * 14) + 1;
-    const d = Math.floor(Math.random() * 7) + 1;
-    const a = Math.floor(Math.random() * 12);
-    const durMin = 18 + Math.floor(Math.random() * 22);
-    const durSec = durMin * 60 + Math.floor(Math.random() * 60);
-    const { blueTeam, redTeam } = generateTeams(champ.kr, champ.pos);
-    const winProb = generateWinProb(win, durMin);
-    return {
-      gameId: `KR_${7234560000 + i * 1000 + Math.floor(Math.random() * 999)}`,
-      champion: champ.kr, position: champ.pos, positionKr: POS_KR[champ.pos],
-      win, kills: k, deaths: d, assists: a,
-      kda: ((k + a) / Math.max(1, d)).toFixed(2),
-      cs: 120 + Math.floor(Math.random() * 200),
-      visionScore: 8 + Math.floor(Math.random() * 40),
-      duration: durSec, durationStr: `${durMin}:${String(durSec % 60).padStart(2, "0")}`,
-      damageDealt: 12000 + Math.floor(Math.random() * 55000),
-      date: new Date(Date.now() - i * 1000 * 60 * (60 + Math.floor(Math.random() * 120))).toISOString(),
-      summonerName: gameName, tagLine,
-      winProbability: winProb, keyEvents: generateKeyEvents(win, durMin),
-      keyMoments: detectKeyMoments(winProb), blueTeam, redTeam,
-    };
-  });
+  const RIOT_KEY = getRiotApiKey();
+  if (!RIOT_KEY) return res.status(500).json({ error: "Riot API 키가 설정되지 않았습니다." });
 
-  res.json({ summonerName: gameName, tagLine, games });
+  try {
+    // 1. PUUID 조회
+    const accountRes = await fetch(
+      `https://asia.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(gameName)}/${encodeURIComponent(tagLine)}`,
+      { headers: { "X-Riot-Token": RIOT_KEY } }
+    );
+    if (!accountRes.ok) return res.status(404).json({ error: "소환사를 찾을 수 없습니다." });
+    const account = await accountRes.json();
+    const puuid = account.puuid;
+
+    // 2. 최근 게임 7개 matchId 조회
+    const matchListRes = await fetch(
+      `https://asia.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?count=7&queue=420`,
+      { headers: { "X-Riot-Token": RIOT_KEY } }
+    );
+    const matchIds = await matchListRes.json();
+    if (!Array.isArray(matchIds) || matchIds.length === 0) {
+      return res.status(404).json({ error: "최근 랭크 게임이 없습니다." });
+    }
+
+    // 3. 각 게임 상세 + 타임라인 조회
+    const games = await Promise.all(matchIds.map(async (matchId) => {
+      try {
+        const [matchRes, timelineRes] = await Promise.all([
+          fetch(`https://asia.api.riotgames.com/lol/match/v5/matches/${matchId}`, { headers: { "X-Riot-Token": RIOT_KEY } }),
+          fetch(`https://asia.api.riotgames.com/lol/match/v5/matches/${matchId}/timeline`, { headers: { "X-Riot-Token": RIOT_KEY } }),
+        ]);
+        const match = await matchRes.json();
+        const timeline = await timelineRes.json();
+
+        const info = match.info;
+        const participant = info.participants.find(p => p.puuid === puuid);
+        if (!participant) return null;
+
+        const win = participant.win;
+        const kills = participant.kills;
+        const deaths = participant.deaths;
+        const assists = participant.assists;
+        const cs = participant.totalMinionsKilled + participant.neutralMinionsKilled;
+        const visionScore = participant.visionScore;
+        const damageDealt = participant.totalDamageDealtToChampions;
+        const duration = info.gameDuration;
+        const durMin = Math.floor(duration / 60);
+        const champion = participant.championName;
+        const position = participant.teamPosition || "UNKNOWN";
+
+        // 팀 구성
+        const blueTeam = info.participants.filter(p => p.teamId === 100).map(p => ({
+          champion: p.championName,
+          role: POS_KR[p.teamPosition] || p.teamPosition,
+          isPlayer: p.puuid === puuid,
+        }));
+        const redTeam = info.participants.filter(p => p.teamId === 200).map(p => ({
+          champion: p.championName,
+          role: POS_KR[p.teamPosition] || p.teamPosition,
+          isPlayer: false,
+        }));
+
+        // 타임라인에서 피처 추출
+        const frames = timeline.info.frames;
+        const DROP_MINUTES = 2;
+        const isBlueTeam = participant.teamId === 100;
+        const playerParticipantId = participant.participantId;
+        const blueIds = info.participants.filter(p => p.teamId === 100).map(p => p.participantId);
+        const redIds = info.participants.filter(p => p.teamId === 200).map(p => p.participantId);
+
+        // 오브젝트 누적 (분 단위)
+        let b_top = 0, b_mid = 0, b_bot = 0;
+        let r_top = 0, r_mid = 0, r_bot = 0;
+        let b_dragon = 0, b_horde = 0, b_herald = 0, b_baron = 0;
+
+        const frameFeatures = [];
+        const keyEvents = [];
+
+        for (let minute = 0; minute < frames.length; minute++) {
+          const frame = frames[minute];
+
+          // 오브젝트 이벤트 처리
+          for (const event of (frame.events || [])) {
+            if (event.type === "BUILDING_KILL") {
+              const isBlueSide = event.teamId === 100;
+              if (event.buildingType === "TOWER_BUILDING") {
+                const lane = event.laneType;
+                if (isBlueSide) {
+                  if (lane === "TOP_LANE") r_top = 1;
+                  else if (lane === "MID_LANE") r_mid = 1;
+                  else if (lane === "BOT_LANE") r_bot = 1;
+                } else {
+                  if (lane === "TOP_LANE") b_top = 1;
+                  else if (lane === "MID_LANE") b_mid = 1;
+                  else if (lane === "BOT_LANE") b_bot = 1;
+                }
+              }
+            }
+            if (event.type === "ELITE_MONSTER_KILL") {
+              const isBlueKill = blueIds.includes(event.killerId);
+              const monster = event.monsterType;
+              if (isBlueKill) {
+                if (monster === "DRAGON") b_dragon = 1;
+                else if (monster === "HORDE") b_horde = 1;
+                else if (monster === "RIFTHERALD") b_herald = 1;
+                else if (monster === "BARON_NASHOR") b_baron = 1;
+              }
+              const eMin = Math.floor((event.timestamp || 0) / 60000);
+              keyEvents.push({
+                minute: eMin,
+                type: monster.toLowerCase(),
+                label: monster === "DRAGON" ? "드래곤" : monster === "BARON_NASHOR" ? "바론 나스" : monster === "RIFTHERALD" ? "전령" : monster,
+                isOurs: isBlueTeam ? isBlueKill : !isBlueKill,
+              });
+            }
+            if (event.type === "CHAMPION_KILL" && minute < 5) {
+              const eMin = Math.floor((event.timestamp || 0) / 60000);
+              if (eMin <= 5) {
+                keyEvents.push({ minute: eMin, type: "firstBlood", label: "퍼스트 블러드", isOurs: blueIds.includes(event.killerId) === isBlueTeam });
+              }
+            }
+          }
+
+          if (minute < DROP_MINUTES) continue;
+
+          const pFrames = frame.participantFrames;
+          const b_gold = blueIds.reduce((s, id) => s + (pFrames[String(id)]?.totalGold || 0), 0);
+          const r_gold = redIds.reduce((s, id) => s + (pFrames[String(id)]?.totalGold || 0), 0);
+          const b_xp = blueIds.reduce((s, id) => s + (pFrames[String(id)]?.xp || 0), 0);
+          const r_xp = redIds.reduce((s, id) => s + (pFrames[String(id)]?.xp || 0), 0);
+
+          frameFeatures.push({
+            blue_gold: b_gold, red_gold: r_gold,
+            blue_xp: b_xp, red_xp: r_xp,
+            top_tower: b_top, mid_tower: b_mid, bot_tower: b_bot,
+            dragon: b_dragon, horde: b_horde, riftherald: b_herald, baron: b_baron,
+          });
+        }
+
+        // LSTM 승률 예측
+        let winProbability = [];
+        try {
+          const predictRes = await fetch("http://localhost:5001/predict", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ frames: frameFeatures }),
+          });
+          const predictData = await predictRes.json();
+          winProbability = (predictData.win_probability || []).map(d => ({
+            minute: d.minute,
+            prob: Math.round(d.prob),
+          }));
+        } catch (e) {
+          console.error("LSTM 예측 실패:", e.message);
+        }
+
+        const keyMoments = detectKeyMoments(winProbability);
+
+        return {
+          gameId: matchId,
+          champion,
+          position: POS_EN[position] || position,
+          positionKr: POS_KR[position] || position,
+          win,
+          kills, deaths, assists,
+          kda: ((kills + assists) / Math.max(1, deaths)).toFixed(2),
+          cs, visionScore, damageDealt,
+          duration,
+          durationStr: `${durMin}:${String(duration % 60).padStart(2, "0")}`,
+          date: new Date(info.gameCreation).toISOString(),
+          summonerName: gameName,
+          tagLine,
+          winProbability,
+          keyEvents: keyEvents.slice(0, 10),
+          keyMoments,
+          blueTeam,
+          redTeam,
+        };
+      } catch (e) {
+        console.error("게임 처리 오류:", e.message);
+        return null;
+      }
+    }));
+
+    res.json({ summonerName: gameName, tagLine, games: games.filter(Boolean) });
+
+  } catch (e) {
+    console.error("Riot API 오류:", e.message);
+    res.status(500).json({ error: "Riot API 호출 중 오류가 발생했습니다." });
+  }
 });
-
 
 // ─── LSTM 승률 예측 ──────────────────────────────────
 app.post("/api/predict/winrate", async (req, res) => {

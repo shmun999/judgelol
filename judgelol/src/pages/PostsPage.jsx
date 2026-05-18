@@ -4,7 +4,7 @@ import PostCard from "../components/PostCard";
 import { getPosts } from "../api";
 import { PenSquare, Flame, Clock, CheckCircle, List } from "lucide-react";
 
-export default function PostsPage() {
+export default function PostsPage({ isAdmin }) {
   const navigate = useNavigate();
   const [filter, setFilter] = useState("all");
   const [posts, setPosts] = useState([]);
@@ -73,6 +73,7 @@ export default function PostsPage() {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {posts.map((post) => (
             <PostCard
+              isAdmin={isAdmin}
               key={post.id}
               post={post}
               onClick={() => navigate(`/board/${post.id}`)}

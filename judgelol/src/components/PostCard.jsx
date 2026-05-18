@@ -1,7 +1,7 @@
 import { MessageCircle, ThumbsUp, ThumbsDown, Clock, Flame } from "lucide-react";
 import { TIER_COLORS } from "../data/mockData";
 
-export default function PostCard({ post, onClick }) {
+export default function PostCard({ post, onClick, isAdmin }) {
   const votes = post.votes || [];
   const topVote = votes.length > 0 ? Math.max(...votes.map((v) => v.count)) : 0;
   const totalVotes = votes.reduce((a, b) => a + b.count, 0);
@@ -47,8 +47,9 @@ export default function PostCard({ post, onClick }) {
       {/* 투표 현황 */}
       <div className="px-4 pb-3 space-y-1.5">
         {votes.map((v, i) => {
-          const pct = totalVotes ? Math.round((v.count / totalVotes) * 100) : 0;
-          const isTop = v.count === topVote && topVote > 0;
+          const showStats = isAdmin || post.is_closed;
+          const pct = totalVotes && showStats ? Math.round((v.count / totalVotes) * 100) : 0;
+          const isTop = showStats && v.count === topVote && topVote > 0;
           return (
             <div key={i} className="flex items-center gap-2">
               <span className={`text-xs w-20 truncate shrink-0 ${isTop ? "font-bold text-blue-600" : "text-slate-400"}`}>
@@ -58,13 +59,13 @@ export default function PostCard({ post, onClick }) {
                 <div
                   className="h-full rounded-full transition-all duration-500"
                   style={{
-                    width: `${pct}%`,
+                    width: showStats ? `${pct}%` : "0%",
                     background: isTop ? "linear-gradient(90deg, #3b82f6, #06b6d4)" : "#cbd5e1",
                   }}
                 />
               </div>
               <span className={`text-xs w-8 text-right shrink-0 ${isTop ? "font-bold text-blue-600" : "text-slate-400"}`}>
-                {pct}%
+                {showStats ? `${pct}%` : "-"}
               </span>
             </div>
           );
@@ -86,7 +87,7 @@ export default function PostCard({ post, onClick }) {
           {post.comment_count ?? 0}
         </span>
         <span className="ml-auto font-semibold text-slate-500">
-          총 {totalVotes}표
+          {(isAdmin || post.is_closed) ? `총 ${totalVotes}표` : `총 -표`}
         </span>
       </div>
     </button>

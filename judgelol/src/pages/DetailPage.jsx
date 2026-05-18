@@ -343,13 +343,15 @@ export default function DetailPage({ isLoggedIn, userName, userEmail, isAdmin })
     if (votedFor !== null) return;
     setVotedFor(option.id);
     await vote(id, option.id, userEmail);
-    // 투표 수 로컬 업데이트
-    setPost((prev) => ({
-      ...prev,
-      votes: prev.votes.map((v) =>
-        v.id === option.id ? { ...v, count: v.count + 1 } : v
-      ),
-    }));
+    // 투표 수 로컬 업데이트 (관리자만 count 증가 반영)
+    if (isAdmin) {
+      setPost((prev) => ({
+        ...prev,
+        votes: prev.votes.map((v) =>
+          v.id === option.id ? { ...v, count: v.count + 1 } : v
+        ),
+      }));
+    }
   };
 
   const handleComment = async () => {

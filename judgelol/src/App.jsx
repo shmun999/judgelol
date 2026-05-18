@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import Header from "./components/Header";
@@ -22,6 +22,22 @@ export default function App() {
   const [userPicture, setUserPicture] = useState(savedUser?.picture || "");
   const [isAdmin, setIsAdmin] = useState(savedUser?.email === "keomjongseol@gmail.com");
   const [points, setPoints] = useState(savedUser?.points ?? 0);
+
+  // 새로고침 시 서버에서 최신 포인트 가져오기
+  useEffect(() => {
+    if (savedUser?.email) {
+      fetch(`${BASE_URL}/users/points?email=${encodeURIComponent(savedUser.email)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.points !== undefined) {
+            setPoints(data.points);
+            const user = JSON.parse(localStorage.getItem("user") || "{}");
+            localStorage.setItem("user", JSON.stringify({ ...user, points: data.points }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("user");
@@ -72,7 +88,7 @@ export default function App() {
         <main className="max-w-7xl mx-auto px-6 py-8">
           <Routes>
             <Route path="/" element={<HomePage />} />
-            <Route path="/board" element={<PostsPage />} />
+            <Route path="/board" element={<PostsPage isAdmin={isAdmin} />} />
             <Route path="/board/:id" element={<DetailPage isLoggedIn={isLoggedIn} userName={userName} userEmail={userEmail} isAdmin={isAdmin} />} />
             <Route path="/write" element={<WritePage isLoggedIn={isLoggedIn} userName={userName} userEmail={userEmail} />} />
             <Route path="/shop" element={<ComingSoonPage title="상점" />} />

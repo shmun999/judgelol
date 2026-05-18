@@ -528,6 +528,7 @@ app.get("/api/riot/summoner", async (req, res) => {
                 type: monster.toLowerCase(),
                 label: monsterLabel,
                 isBlue: isBlueKill,
+                showTeam: true,
               });
             }
 
@@ -545,6 +546,7 @@ app.get("/api/riot/summoner", async (req, res) => {
                   type: "firstBlood",
                   label: `퍼스트 블러드: ${killerChamp}→${victimChamp} 처치`,
                   isBlue: isBlueKill,
+                  showTeam: false,
                 });
               } else {
                 keyEvents.push({
@@ -552,6 +554,7 @@ app.get("/api/riot/summoner", async (req, res) => {
                   type: "kill",
                   label: `${killerChamp}→${victimChamp} 처치`,
                   isBlue: isBlueKill,
+                  showTeam: false,
                 });
               }
             }

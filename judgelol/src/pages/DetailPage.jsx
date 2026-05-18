@@ -76,14 +76,7 @@ function WinProbChart({ data, keyEvents, keyMoments }) {
           </g>
         ))}
 
-        {/* 주요 이벤트 수직선 */}
-        {(keyEvents || []).map((e, i) => (
-          <line key={i}
-            x1={x(e.minute)} y1={pt} x2={x(e.minute)} y2={pt + ch}
-            stroke={e.isBlue ? "#3b82f6" : "#ef4444"}
-            strokeWidth="1" strokeDasharray="3,3" opacity="0.5"
-          />
-        ))}
+
 
         {/* 주요 관전 포인트 강조 */}
         {(keyMoments || []).map((km, i) => (
@@ -157,7 +150,7 @@ function WinProbChart({ data, keyEvents, keyMoments }) {
           <div key={i} className="flex items-center gap-1">
             <span className="inline-block w-2.5 h-2.5 rounded-sm"
               style={{ background: e.isBlue ? "#3b82f6" : "#ef4444" }} />
-            <span>{e.minute}분 {e.label}({e.isBlue ? "블루팀" : "레드팀"})</span>
+            <span>{e.minute}분 {e.label}{e.showTeam ? `(${e.isBlue ? "블루팀" : "레드팀"})` : ""}</span>
           </div>
         ))}
       </div>

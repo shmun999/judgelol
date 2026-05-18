@@ -451,6 +451,27 @@ app.get("/api/riot/summoner", (req, res) => {
   res.json({ summonerName: gameName, tagLine, games });
 });
 
+
+// ─── LSTM 승률 예측 ──────────────────────────────────
+app.post("/api/predict/winrate", async (req, res) => {
+  const { frames } = req.body;
+  if (!frames || frames.length === 0) {
+    return res.status(400).json({ error: "frames 데이터가 필요합니다." });
+  }
+
+  try {
+    const response = await fetch("http://localhost:5001/predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ frames }),
+    });
+    const data = await response.json();
+    res.json(data);
+  } catch (e) {
+    res.status(503).json({ error: "AI 예측 서버에 연결할 수 없습니다." });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`✅ 서버 실행 중: http://localhost:${PORT}`);
   console.log(`📁 DB 저장 위치: db.sqlite`);

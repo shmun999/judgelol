@@ -267,7 +267,7 @@ function GameInfoSection({ gameData }) {
             <h3 className="text-sm font-bold text-slate-700 mb-2.5">팀 구성</h3>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <div className="text-xs font-bold text-blue-500 mb-1.5">🔵 블루팀 (플레이어)</div>
+                <div className="text-xs font-bold text-blue-500 mb-1.5">🔵 블루팀</div>
                 <div className="space-y-1">
                   {blueTeam.map((p, i) => (
                     <div key={i} className={`flex items-center gap-1.5 text-xs rounded px-2.5 py-1.5 ${
@@ -285,7 +285,7 @@ function GameInfoSection({ gameData }) {
                 </div>
               </div>
               <div>
-                <div className="text-xs font-bold text-red-400 mb-1.5">🔴 레드팀 (상대)</div>
+                <div className="text-xs font-bold text-red-400 mb-1.5">🔴 레드팀</div>
                 <div className="space-y-1">
                   {redTeam.map((p, i) => (
                     <div key={i} className="flex items-center gap-1.5 text-xs bg-slate-50 rounded px-2.5 py-1.5">

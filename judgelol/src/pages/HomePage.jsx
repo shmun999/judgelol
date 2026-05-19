@@ -16,7 +16,7 @@ export default function HomePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const hotPosts = [...posts].sort((a, b) => b.views - a.views).slice(0, 3);
+  const hotPosts = [...posts].filter(p => (p.likes || 0) >= 5).sort((a, b) => b.likes - a.likes).slice(0, 3);
   const newPosts = [...posts].slice(0, 3);
 
   return (

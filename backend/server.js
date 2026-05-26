@@ -469,7 +469,7 @@ app.get("/api/riot/summoner", async (req, res) => {
 
         // 타임라인에서 피처 추출
         const frames = timeline.info.frames;
-        const DROP_MINUTES = 2;
+        const DROP_MINUTES = 0;
         const isBlueTeam = participant.teamId === 100;
         const playerParticipantId = participant.participantId;
         const blueIds = info.participants.filter(p => p.teamId === 100).map(p => p.participantId);
@@ -479,6 +479,7 @@ app.get("/api/riot/summoner", async (req, res) => {
         let b_top = 0, b_mid = 0, b_bot = 0;
         let r_top = 0, r_mid = 0, r_bot = 0;
         let b_dragon = 0, b_horde = 0, b_herald = 0, b_baron = 0;
+        let r_dragon = 0, r_horde = 0, r_herald = 0, r_baron = 0;
 
         const frameFeatures = [];
         const keyEvents = [];
@@ -516,10 +517,15 @@ app.get("/api/riot/summoner", async (req, res) => {
               const isBlueKill = blueIds.includes(event.killerId);
               const monster = event.monsterType;
               if (isBlueKill) {
-                if (monster === "DRAGON") b_dragon = 1;
-                else if (monster === "HORDE") b_horde = 1;
-                else if (monster === "RIFTHERALD") b_herald = 1;
-                else if (monster === "BARON_NASHOR") b_baron = 1;
+                if (monster === "DRAGON") b_dragon++;
+                else if (monster === "HORDE") b_horde++;
+                else if (monster === "RIFTHERALD") b_herald++;
+                else if (monster === "BARON_NASHOR") b_baron++;
+              } else {
+                if (monster === "DRAGON") r_dragon++;
+                else if (monster === "HORDE") r_horde++;
+                else if (monster === "RIFTHERALD") r_herald++;
+                else if (monster === "BARON_NASHOR") r_baron++;
               }
               const eMin = Math.floor((event.timestamp || 0) / 60000);
               const monsterLabel = monster === "DRAGON" ? "드래곤" : monster === "BARON_NASHOR" ? "바론 나스" : monster === "RIFTHERALD" ? "전령" : monster === "HORDE" ? "유충" : monster;
@@ -571,8 +577,8 @@ app.get("/api/riot/summoner", async (req, res) => {
           frameFeatures.push({
             blue_gold: b_gold, red_gold: r_gold,
             blue_xp: b_xp, red_xp: r_xp,
-            top_tower: b_top, mid_tower: b_mid, bot_tower: b_bot,
-            dragon: b_dragon, horde: b_horde, riftherald: b_herald, baron: b_baron,
+            top_tower: b_top - r_top, mid_tower: b_mid - r_mid, bot_tower: b_bot - r_bot,
+            dragon: b_dragon - r_dragon, horde: b_horde - r_horde, riftherald: b_herald - r_herald, baron: b_baron - r_baron,
           });
         }
 

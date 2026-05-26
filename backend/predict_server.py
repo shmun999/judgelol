@@ -146,7 +146,7 @@ def predict():
                 window_scaled = scaler.transform(window_raw)
                 tensor = torch.tensor(window_scaled, dtype=torch.float32).unsqueeze(0).to(DEVICE)
                 prob = model(tensor).item()
-                minute = DROP_MINUTES + t  # 실제 게임 분
+                minute = DROP_MINUTES + t - 1  # 실제 게임 분
                 win_probs.append({
                     "minute": minute,
                     "prob": round(prob * 100, 1)

@@ -419,24 +419,13 @@ app.get("/api/riot/summoner", async (req, res) => {
     const account = await accountRes.json();
     const puuid = account.puuid;
 
-    // 2. 솔랭(420) + 자랭(440) + 일반(400) 각각 조회 후 합치기
-    const queueTypes = [420, 440, 400];
-    const allMatchIds = [];
-
-    for (const queue of queueTypes) {
-      try {
-        const res = await fetch(
-          `https://asia.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?count=7&queue=${queue}`,
-          { headers: { "X-Riot-Token": RIOT_KEY } }
-        );
-        const ids = await res.json();
-        if (Array.isArray(ids)) allMatchIds.push(...ids);
-      } catch {}
-    }
-
-    // 중복 제거 후 최신 7개
-    const matchIds = [...new Set(allMatchIds)].slice(0, 7);
-    if (matchIds.length === 0) {
+    // 2. 최근 10경기 조회 (queue 구분 없이)
+    const matchIdsRes = await fetch(
+      `https://asia.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?count=10`,
+      { headers: { "X-Riot-Token": RIOT_KEY } }
+    );
+    const matchIds = await matchIdsRes.json();
+    if (!Array.isArray(matchIds) || matchIds.length === 0) {
       return res.status(404).json({ error: "최근 게임 기록이 없습니다." });
     }
 

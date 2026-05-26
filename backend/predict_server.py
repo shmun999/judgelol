@@ -1,5 +1,5 @@
 """
-JUDGELOL LSTM 승률 예측 서버
+JUDGELOL Decoder-Only 승률 예측 서버
 - 포트: 5001
 - Node.js 백엔드에서 호출
 """
@@ -10,19 +10,20 @@ import torch
 import torch.nn as nn
 import joblib
 import os
+import math
 
 app = Flask(__name__)
 
 # ─── 설정 ───────────────────────────────────────────
-WINDOW_SIZE = 5
-DROP_MINUTES = 2
+WINDOW_SIZE = 3
+DROP_MINUTES = 0
 DEVICE = torch.device("cpu")  # EC2 t2.micro는 CPU만 사용
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "best_lstm.pt")
-SCALER_PATH = os.path.join(os.path.dirname(__file__), "scaler.pkl")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "best_decoder_only.pt")
+SCALER_PATH = os.path.join(os.path.dirname(__file__), "scaler_decoder.pkl")
 
 # ─── 피처 순서 (13개) ───────────────────────────────
-# [gold_diff, xp_diff, 이진값7개, blue_gold, red_gold, blue_xp, red_xp]
-# 이진값 순서: top_tower, mid_tower, bot_tower, dragon, horde, riftherald, baron
+# [gold_diff, xp_diff, top_tower, mid_tower, bot_tower,
+#  dragon, horde, riftherald, baron, blue_gold, red_gold, blue_xp, red_xp]
 FEATURE_ORDER = [
     "gold_diff", "xp_diff",
     "top_tower", "mid_tower", "bot_tower",
@@ -30,26 +31,44 @@ FEATURE_ORDER = [
     "blue_gold", "red_gold", "blue_xp", "red_xp"
 ]
 
-# ─── 모델 정의 ───────────────────────────────────────
-class WinPredictorLSTM(nn.Module):
-    def __init__(self, input_size=13, hidden_size=64, num_layers=2, dropout=0.1):
+# ─── 모델 정의 (Decoder-Only / Causal Mask) ─────────
+class WinPredictorDecoderOnly(nn.Module):
+    def __init__(self, input_size=13, d_model=64, nhead=4, num_layers=2, dim_feedforward=128, dropout=0.1, max_len=3):
         super().__init__()
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers,
-                            batch_first=True,
-                            dropout=dropout if num_layers > 1 else 0.0)
-        self.dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(hidden_size, 1)
+        self.d_model = d_model
+
+        self.input_proj = nn.Linear(input_size, d_model)
+        self.pos_encoder = nn.Parameter(torch.randn(1, max_len, d_model) * (1 / math.sqrt(d_model)))
+
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout, batch_first=True
+        )
+        self.transformer_blocks = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+        self.fc = nn.Linear(d_model, 1)
         self.sigmoid = nn.Sigmoid()
 
+        self.register_buffer('causal_mask', self._generate_causal_mask(max_len))
+
+    def _generate_causal_mask(self, sz):
+        mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
+        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+        return mask
+
     def forward(self, x):
-        out, _ = self.lstm(x)
-        out = self.dropout(out[:, -1, :])
+        x = self.input_proj(x)
+        x = x + self.pos_encoder[:, :x.size(1), :]
+
+        seq_len = x.size(1)
+        x = self.transformer_blocks(x, mask=self.causal_mask[:seq_len, :seq_len])
+
+        out = x[:, -1, :]
         return self.sigmoid(self.fc(out)).squeeze(1)
 
 # ─── 모델 & 스케일러 로드 ────────────────────────────
 print("📦 모델 및 스케일러 로딩 중...")
 scaler = joblib.load(SCALER_PATH)
-model = WinPredictorLSTM(input_size=13).to(DEVICE)
+model = WinPredictorDecoderOnly(input_size=13, max_len=WINDOW_SIZE).to(DEVICE)
 model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
 model.eval()
 print("✅ 모델 로딩 완료!")
@@ -70,12 +89,12 @@ def predict():
             ...
         ]
     }
-    
+
     응답 형식:
     {
         "win_probability": [
-            { "minute": 7, "prob": 52 },
-            { "minute": 8, "prob": 55 },
+            { "minute": 2, "prob": 52 },
+            { "minute": 3, "prob": 55 },
             ...
         ]
     }
@@ -117,9 +136,14 @@ def predict():
         # 슬라이딩 윈도우 예측
         win_probs = []
         with torch.no_grad():
-            for t in range(WINDOW_SIZE, len(X_raw) + 1):
-                window = X_raw[t - WINDOW_SIZE:t]
-                window_scaled = scaler.transform(window)
+            for t in range(1, len(X_raw) + 1):
+                window_raw = X_raw[t - WINDOW_SIZE:t]
+                # 데이터가 WINDOW_SIZE보다 짧으면 앞을 0으로 패딩
+                if len(window_raw) < WINDOW_SIZE:
+                    pad = np.zeros((WINDOW_SIZE - len(window_raw), X_raw.shape[1]), dtype=np.float32)
+                    window_raw = np.vstack([pad, window_raw])
+
+                window_scaled = scaler.transform(window_raw)
                 tensor = torch.tensor(window_scaled, dtype=torch.float32).unsqueeze(0).to(DEVICE)
                 prob = model(tensor).item()
                 minute = DROP_MINUTES + t  # 실제 게임 분

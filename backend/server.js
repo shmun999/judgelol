@@ -440,34 +440,19 @@ app.get("/api/riot/summoner", async (req, res) => {
       return res.status(404).json({ error: "최근 게임 기록이 없습니다." });
     }
 
-    // 3. 각 게임 상세 + 타임라인 조회 (순차 호출 - rate limit 방지)
-    const games = [];
-    for (const matchId of matchIds) {
-      await new Promise(r => setTimeout(r, 150)); // 150ms 딜레이
+    // 3. 각 게임 상세 + 타임라인 조회
+    const games = await Promise.all(matchIds.map(async (matchId) => {
       try {
-        const matchRes = await fetch(`https://asia.api.riotgames.com/lol/match/v5/matches/${matchId}`, { headers: { "X-Riot-Token": RIOT_KEY } });
+        const [matchRes, timelineRes] = await Promise.all([
+          fetch(`https://asia.api.riotgames.com/lol/match/v5/matches/${matchId}`, { headers: { "X-Riot-Token": RIOT_KEY } }),
+          fetch(`https://asia.api.riotgames.com/lol/match/v5/matches/${matchId}/timeline`, { headers: { "X-Riot-Token": RIOT_KEY } }),
+        ]);
         const match = await matchRes.json();
-
-        if (!match?.info) {
-          console.log(`[스킵] ${matchId} - match 응답 이상 (status: ${match?.status?.status_code})`);
-          games.push(null);
-          continue;
-        }
-
-        await new Promise(r => setTimeout(r, 150));
-        const timelineRes = await fetch(`https://asia.api.riotgames.com/lol/match/v5/matches/${matchId}/timeline`, { headers: { "X-Riot-Token": RIOT_KEY } });
         const timeline = await timelineRes.json();
 
-        if (!timeline?.info) {
-          console.log(`[스킵] ${matchId} - timeline 응답 이상`);
-          games.push(null);
-          continue;
-        }
-
-        try {
         const info = match.info;
         const participant = info.participants.find(p => p.puuid === puuid);
-        if (!participant) { games.push(null); continue; }
+        if (!participant) return null;
 
         const win = participant.win;
         const kills = participant.kills;
@@ -623,7 +608,7 @@ app.get("/api/riot/summoner", async (req, res) => {
 
         const keyMoments = detectKeyMoments(winProbability);
 
-        games.push({
+        return {
           gameId: matchId,
           champion,
           position: POS_EN[position] || position,
@@ -638,20 +623,16 @@ app.get("/api/riot/summoner", async (req, res) => {
           summonerName: gameName,
           tagLine,
           winProbability,
-          keyEvents: keyEvents,
+          keyEvents: keyEvents,  // 전체 이벤트
           keyMoments,
           blueTeam,
           redTeam,
-        });
-        } catch (e) {
-          console.error("게임 처리 오류:", e.message);
-          games.push(null);
-        }
+        };
       } catch (e) {
-        console.error("게임 fetch 오류:", e.message);
-        games.push(null);
+        console.error("게임 처리 오류:", e.message);
+        return null;
       }
-    }
+    }));
 
     res.json({ summonerName: gameName, tagLine, games: games.filter(Boolean) });
 

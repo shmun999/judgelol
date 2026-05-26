@@ -15,7 +15,7 @@ import math
 app = Flask(__name__)
 
 # ─── 설정 ───────────────────────────────────────────
-WINDOW_SIZE = 3
+WINDOW_SIZE = 5          # ✅ 수정: 3 → 5 (모델 학습 조건과 일치)
 DROP_MINUTES = 0
 DEVICE = torch.device("cpu")  # EC2 t2.micro는 CPU만 사용
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "best_decoder_only.pt")
@@ -33,7 +33,7 @@ FEATURE_ORDER = [
 
 # ─── 모델 정의 (Decoder-Only / Causal Mask) ─────────
 class WinPredictorDecoderOnly(nn.Module):
-    def __init__(self, input_size=13, d_model=64, nhead=4, num_layers=2, dim_feedforward=128, dropout=0.1, max_len=3):
+    def __init__(self, input_size=13, d_model=64, nhead=4, num_layers=2, dim_feedforward=128, dropout=0.1, max_len=5):
         super().__init__()
         self.d_model = d_model
 
@@ -68,7 +68,7 @@ class WinPredictorDecoderOnly(nn.Module):
 # ─── 모델 & 스케일러 로드 ────────────────────────────
 print("📦 모델 및 스케일러 로딩 중...")
 scaler = joblib.load(SCALER_PATH)
-model = WinPredictorDecoderOnly(input_size=13, max_len=WINDOW_SIZE).to(DEVICE)
+model = WinPredictorDecoderOnly(input_size=13, max_len=WINDOW_SIZE).to(DEVICE)  # ✅ max_len=WINDOW_SIZE=5
 model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
 model.eval()
 print("✅ 모델 로딩 완료!")
@@ -76,29 +76,6 @@ print("✅ 모델 로딩 완료!")
 # ─── 예측 엔드포인트 ─────────────────────────────────
 @app.route("/predict", methods=["POST"])
 def predict():
-    """
-    요청 형식:
-    {
-        "frames": [
-            {
-                "blue_gold": 500, "red_gold": 500,
-                "blue_xp": 300, "red_xp": 300,
-                "top_tower": 0, "mid_tower": 0, "bot_tower": 0,
-                "dragon": 0, "horde": 0, "riftherald": 0, "baron": 0
-            },
-            ...
-        ]
-    }
-
-    응답 형식:
-    {
-        "win_probability": [
-            { "minute": 2, "prob": 52 },
-            { "minute": 3, "prob": 55 },
-            ...
-        ]
-    }
-    """
     try:
         data = request.json
         frames = data.get("frames", [])
@@ -133,12 +110,17 @@ def predict():
 
         X_raw = np.array(X_raw, dtype=np.float32)
 
-        # 슬라이딩 윈도우 예측
+        # ─── 슬라이딩 윈도우 예측 ────────────────────
         win_probs = []
         with torch.no_grad():
             for t in range(1, len(X_raw) + 1):
-                window_raw = X_raw[t - WINDOW_SIZE:t]
-                # 데이터가 WINDOW_SIZE보다 짧으면 앞을 0으로 패딩
+                # ✅ 핵심 수정: max(0, t - WINDOW_SIZE)
+                # 버그 전: X_raw[t - WINDOW_SIZE:t] → t < WINDOW_SIZE 이면 음수 인덱스
+                #          numpy 음수 인덱스는 배열 끝에서 카운트 → 빈 배열 반환
+                # 수정 후: max(0, ...)로 인덱스가 음수가 되지 않도록 보장
+                window_raw = X_raw[max(0, t - WINDOW_SIZE):t]
+
+                # 실제 데이터가 WINDOW_SIZE보다 짧으면 앞을 패딩
                 if len(window_raw) < WINDOW_SIZE:
                     pad = np.zeros((WINDOW_SIZE - len(window_raw), X_raw.shape[1]), dtype=np.float32)
                     window_raw = np.vstack([pad, window_raw])

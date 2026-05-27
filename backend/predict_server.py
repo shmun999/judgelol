@@ -15,22 +15,15 @@ import math
 app = Flask(__name__)
 
 # ─── 설정 ───────────────────────────────────────────
-WINDOW_SIZE = 5          # ✅ 수정: 3 → 5 (모델 학습 조건과 일치)
+WINDOW_SIZE = 3          # ✅ 수정: 5 → 3 (실제 모델 pos_encoder shape=(1,3,64) 에 맞춤)
 DROP_MINUTES = 0
 DEVICE = torch.device("cpu")
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "best_decoder_only.pt")
 SCALER_PATH = os.path.join(os.path.dirname(__file__), "scaler_decoder.pkl")
 
-FEATURE_ORDER = [
-    "gold_diff", "xp_diff",
-    "top_tower", "mid_tower", "bot_tower",
-    "dragon", "horde", "riftherald", "baron",
-    "blue_gold", "red_gold", "blue_xp", "red_xp"
-]
-
-# ─── 모델 정의 (Decoder-Only / Causal Mask) ─────────
+# ─── 모델 정의 (predict_decoder.py와 동일) ──────────
 class WinPredictorDecoderOnly(nn.Module):
-    def __init__(self, input_size=13, d_model=64, nhead=4, num_layers=2, dim_feedforward=128, dropout=0.1, max_len=5):  # ✅ max_len=5
+    def __init__(self, input_size=13, d_model=64, nhead=4, num_layers=2, dim_feedforward=128, dropout=0.1, max_len=3):  # ✅ max_len=3
         super().__init__()
         self.d_model = d_model
 
@@ -63,7 +56,7 @@ class WinPredictorDecoderOnly(nn.Module):
 # ─── 모델 & 스케일러 로드 ────────────────────────────
 print("📦 모델 및 스케일러 로딩 중...")
 scaler = joblib.load(SCALER_PATH)
-model = WinPredictorDecoderOnly(input_size=13, max_len=WINDOW_SIZE).to(DEVICE)
+model = WinPredictorDecoderOnly(input_size=13, max_len=WINDOW_SIZE).to(DEVICE)  # ✅ max_len=WINDOW_SIZE=3
 model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
 model.eval()
 print("✅ 모델 로딩 완료!")
@@ -75,10 +68,10 @@ def predict():
         data = request.json
         frames = data.get("frames", [])
 
-        if len(frames) < WINDOW_SIZE:
-            return jsonify({"error": f"최소 {WINDOW_SIZE}분 이상의 데이터가 필요합니다."}), 400
+        if len(frames) < 1:
+            return jsonify({"error": "frames 데이터가 필요합니다."}), 400
 
-        # 피처 배열 구성
+        # 피처 배열 구성 (predict_decoder.py의 features.append와 동일한 순서)
         X_raw = []
         for f in frames:
             blue_gold = f.get("blue_gold", 0)
@@ -86,8 +79,8 @@ def predict():
             blue_xp   = f.get("blue_xp", 0)
             red_xp    = f.get("red_xp", 0)
             row = [
-                blue_gold - red_gold,
-                blue_xp - red_xp,
+                blue_gold - red_gold,            # gold_diff
+                blue_xp - red_xp,                # xp_diff
                 f.get("top_tower", 0),
                 f.get("mid_tower", 0),
                 f.get("bot_tower", 0),
@@ -104,18 +97,15 @@ def predict():
 
         X_raw = np.array(X_raw, dtype=np.float32)
 
-        # 슬라이딩 윈도우 예측
-        # ✅ 핵심 수정: X_raw[t - WINDOW_SIZE:t] → X_raw[max(0, t - WINDOW_SIZE):t]
-        # 기존 버그: t < WINDOW_SIZE 일 때 t - WINDOW_SIZE 가 음수
-        #   numpy 음수 인덱스는 배열 끝에서 카운트 → 빈 배열 반환
-        #   → len(window_raw)==0 → 패딩만 5개 → garbage 예측
-        # 수정 후: max(0,...) 로 인덱스가 음수가 되지 않도록 보장
-        #   → t=1이면 X_raw[0:1] (실제 1개 데이터 + 패딩 4개)
-        #   → minute=0 부터 정상적으로 예측값이 나옴
+        # ✅ predict_decoder.py와 완전히 동일한 슬라이딩 윈도우 로직
+        # t=1: X_raw[-2:1] → 긴 배열에서 음수 인덱스 → 빈 배열 → 전체 zero 패딩 → minute=0 예측
+        # t=2: X_raw[-1:2] → 빈 배열 → 전체 zero 패딩 → minute=1 예측
+        # t=3: X_raw[0:3]  → 실제 데이터 3개 → minute=2 예측
+        # → 모델이 zero 패딩으로 학습됐기 때문에 minute=0부터 정상 예측 가능
         win_probs = []
         with torch.no_grad():
             for t in range(1, len(X_raw) + 1):
-                window_raw = X_raw[max(0, t - WINDOW_SIZE):t]  # ✅ max(0, ...) 추가
+                window_raw = X_raw[t - WINDOW_SIZE:t]
                 if len(window_raw) < WINDOW_SIZE:
                     pad = np.zeros((WINDOW_SIZE - len(window_raw), X_raw.shape[1]), dtype=np.float32)
                     window_raw = np.vstack([pad, window_raw])
@@ -123,7 +113,7 @@ def predict():
                 window_scaled = scaler.transform(window_raw)
                 tensor = torch.tensor(window_scaled, dtype=torch.float32).unsqueeze(0).to(DEVICE)
                 prob = model(tensor).item()
-                minute = DROP_MINUTES + t - 1  # minute=0 부터 시작
+                minute = DROP_MINUTES + t - 1
                 win_probs.append({
                     "minute": minute,
                     "prob": round(prob * 100, 1)

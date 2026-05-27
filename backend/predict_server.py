@@ -15,7 +15,7 @@ import math
 app = Flask(__name__)
 
 # ─── 설정 ───────────────────────────────────────────
-WINDOW_SIZE = 5
+WINDOW_SIZE = 5          # ✅ 수정: 3 → 5 (모델 학습 조건과 일치)
 DROP_MINUTES = 0
 DEVICE = torch.device("cpu")
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "best_decoder_only.pt")
@@ -104,17 +104,26 @@ def predict():
 
         X_raw = np.array(X_raw, dtype=np.float32)
 
-        # ✅ 수정: t를 WINDOW_SIZE부터 시작 → 항상 정확히 WINDOW_SIZE개 실제 데이터만 사용
-        # 기존: range(1, len+1) + 음수 인덱스 버그 → 초반 t에서 빈 배열 → garbage 예측
-        # 수정: range(WINDOW_SIZE, len+1) → t=WINDOW_SIZE일 때 X_raw[0:WINDOW_SIZE] 정상
+        # 슬라이딩 윈도우 예측
+        # ✅ 핵심 수정: X_raw[t - WINDOW_SIZE:t] → X_raw[max(0, t - WINDOW_SIZE):t]
+        # 기존 버그: t < WINDOW_SIZE 일 때 t - WINDOW_SIZE 가 음수
+        #   numpy 음수 인덱스는 배열 끝에서 카운트 → 빈 배열 반환
+        #   → len(window_raw)==0 → 패딩만 5개 → garbage 예측
+        # 수정 후: max(0,...) 로 인덱스가 음수가 되지 않도록 보장
+        #   → t=1이면 X_raw[0:1] (실제 1개 데이터 + 패딩 4개)
+        #   → minute=0 부터 정상적으로 예측값이 나옴
         win_probs = []
         with torch.no_grad():
-            for t in range(WINDOW_SIZE, len(X_raw) + 1):
-                window_raw = X_raw[t - WINDOW_SIZE:t]   # 항상 정확히 WINDOW_SIZE개
+            for t in range(1, len(X_raw) + 1):
+                window_raw = X_raw[max(0, t - WINDOW_SIZE):t]  # ✅ max(0, ...) 추가
+                if len(window_raw) < WINDOW_SIZE:
+                    pad = np.zeros((WINDOW_SIZE - len(window_raw), X_raw.shape[1]), dtype=np.float32)
+                    window_raw = np.vstack([pad, window_raw])
+
                 window_scaled = scaler.transform(window_raw)
                 tensor = torch.tensor(window_scaled, dtype=torch.float32).unsqueeze(0).to(DEVICE)
                 prob = model(tensor).item()
-                minute = DROP_MINUTES + t - 1            # 첫 minute = WINDOW_SIZE - 1 = 4
+                minute = DROP_MINUTES + t - 1  # minute=0 부터 시작
                 win_probs.append({
                     "minute": minute,
                     "prob": round(prob * 100, 1)

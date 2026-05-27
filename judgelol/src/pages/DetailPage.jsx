@@ -42,8 +42,11 @@ function WinProbChart({ data, keyEvents, keyMoments }) {
   const y = (p) => pt + (1 - p / 100) * ch;
 
   const points = data.map((d) => `${x(d.minute)},${y(d.prob)}`).join(" ");
+  // ✅ 수정: x(0) → x(data[0].minute)
+  // 서버가 minute=4부터 데이터를 보낼 때 areaPath가 0분 위치에서 시작하면
+  // 0~4분 사이 구간이 비어 보이는 문제가 발생했음
   const areaPath =
-    `M ${x(0)},${y(50)} ` +
+    `M ${x(data[0].minute)},${y(50)} ` +
     data.map((d) => `L ${x(d.minute)},${y(d.prob)}`).join(" ") +
     ` L ${x(maxMin)},${y(50)} Z`;
 
@@ -122,7 +125,10 @@ function WinProbChart({ data, keyEvents, keyMoments }) {
         <polyline points={points} fill="none" stroke="#60a5fa" strokeWidth="2.5" strokeLinejoin="round" />
 
         {/* 시작/끝 포인트 */}
-        <circle cx={x(0)} cy={y(data[0].prob)} r="3" fill="#60a5fa" />
+        {/* ✅ 수정: x(0) → x(data[0].minute)
+            서버가 4분부터 데이터를 보낼 때 x(0)에 원을 찍으면
+            실제 선과 분리된 고립된 점이 0분 위치에 생겼음 */}
+        <circle cx={x(data[0].minute)} cy={y(data[0].prob)} r="3" fill="#60a5fa" />
         <circle cx={x(maxMin)} cy={y(lastProb)} r="5"
           fill={lastProb >= 50 ? "#22c55e" : "#f87171"} />
         <text x={Math.min(x(maxMin) + 8, W - 28)} y={y(lastProb) + 4}

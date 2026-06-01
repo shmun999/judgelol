@@ -174,6 +174,16 @@ app.post("/api/posts", (req, res) => {
   }
 
   const db = getDB();
+
+  // 글 작성 시 50포인트 차감
+  if (author_email) {
+    const user = db.prepare("SELECT points FROM users WHERE email = ?").get(author_email);
+    if (!user || user.points < 50) {
+      return res.status(400).json({ error: "포인트가 부족합니다. (글 작성: 50포인트 필요)" });
+    }
+    db.prepare("UPDATE users SET points = points - 50 WHERE email = ?").run(author_email);
+  }
+
   const result = db.prepare(`
     INSERT INTO posts (title, description, youtube_url, author, author_email, tier, game_data, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
@@ -260,6 +270,13 @@ app.post("/api/posts/:id/vote", (req, res) => {
   const option = db.prepare("SELECT * FROM vote_options WHERE id = ? AND post_id = ?").get(Number(option_id), postId);
   if (!option) return res.status(404).json({ error: "투표 항목을 찾을 수 없습니다." });
 
+  // 투표 시 10포인트 차감
+  const user = db.prepare("SELECT points FROM users WHERE email = ?").get(user_email);
+  if (!user || user.points < 10) {
+    return res.status(400).json({ error: "포인트가 부족합니다. (투표: 10포인트 필요)" });
+  }
+  db.prepare("UPDATE users SET points = points - 10 WHERE email = ?").run(user_email);
+
   db.prepare("UPDATE vote_options SET count = count + 1 WHERE id = ?").run(Number(option_id));
   db.prepare("INSERT INTO votes (post_id, user_email, option_id) VALUES (?, ?, ?)").run(postId, user_email, Number(option_id));
 
@@ -313,6 +330,15 @@ app.post("/api/posts/:id/comments", (req, res) => {
   const post = db.prepare("SELECT * FROM posts WHERE id = ?").get(postId);
   if (!post) return res.status(404).json({ error: "게시글을 찾을 수 없습니다." });
   if (post.is_closed) return res.status(400).json({ error: "판정이 완료된 게시글입니다." });
+
+  // 댓글 작성 시 100포인트 차감
+  if (author_email) {
+    const user = db.prepare("SELECT points FROM users WHERE email = ?").get(author_email);
+    if (!user || user.points < 100) {
+      return res.status(400).json({ error: "포인트가 부족합니다. (댓글: 100포인트 필요)" });
+    }
+    db.prepare("UPDATE users SET points = points - 100 WHERE email = ?").run(author_email);
+  }
 
   const result = db.prepare(`
     INSERT INTO comments (post_id, author, author_email, tier, content, created_at)
@@ -382,24 +408,23 @@ const POS_KR = { TOP: "탑", JUNGLE: "정글", MIDDLE: "미드", BOTTOM: "원딜
 const POS_EN = { TOP: "TOP", JUNGLE: "JGL", MIDDLE: "MID", BOTTOM: "BOT", UTILITY: "SUP" };
 
 function detectKeyMoments(winProb) {
-  if (!winProb || winProb.length < 6) return [];
-  const W = 4;
+  if (!winProb || winProb.length < 2) return [];
   const candidates = [];
-  for (let i = W; i < winProb.length - W; i++) {
-    const change = winProb[i + W].prob - winProb[i - W].prob;
-    if (Math.abs(change) >= 10) {
-      candidates.push({ minute: winProb[i].minute, prob: winProb[i].prob, change, label: change > 0 ? "승률 급반전 ↑" : "승률 급하락 ↓", isPositive: change > 0 });
-    }
+  for (let i = 1; i < winProb.length; i++) {
+    const change = winProb[i].prob - winProb[i - 1].prob;
+    candidates.push({
+      minute: winProb[i].minute,
+      prob: winProb[i].prob,
+      change,
+      label: change > 0 ? "승률 급반전 ↑" : "승률 급하락 ↓",
+      isPositive: change > 0,
+    });
   }
-  const deduped = [];
-  candidates.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
-  for (const c of candidates) {
-    if (!deduped.some((d) => Math.abs(d.minute - c.minute) < 5)) {
-      deduped.push(c);
-      if (deduped.length >= 3) break;
-    }
-  }
-  return deduped.sort((a, b) => a.minute - b.minute);
+  // 변동 절댓값 기준 내림차순 정렬 후 top 3 추출, 시간순으로 반환
+  return candidates
+    .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
+    .slice(0, 3)
+    .sort((a, b) => a.minute - b.minute);
 }
 
 app.get("/api/riot/summoner", async (req, res) => {

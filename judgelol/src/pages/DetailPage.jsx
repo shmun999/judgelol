@@ -32,6 +32,8 @@ function toEmbedUrl(url) {
 
 // ── WinProbChart ─────────────────────────────────────────────────
 function WinProbChart({ data, keyEvents, keyMoments }) {
+  const [tooltip, setTooltip] = useState(null); // { minute, prob, cx, cy, events }
+
   if (!data || data.length === 0) return null;
   const W = 620, H = 220;
   const pl = 46, pr = 20, pt = 26, pb = 36;
@@ -42,9 +44,6 @@ function WinProbChart({ data, keyEvents, keyMoments }) {
   const y = (p) => pt + (1 - p / 100) * ch;
 
   const points = data.map((d) => `${x(d.minute)},${y(d.prob)}`).join(" ");
-  // ✅ 수정: x(0) → x(data[0].minute)
-  // 서버가 minute=4부터 데이터를 보낼 때 areaPath가 0분 위치에서 시작하면
-  // 0~4분 사이 구간이 비어 보이는 문제가 발생했음
   const areaPath =
     `M ${x(data[0].minute)},${y(50)} ` +
     data.map((d) => `L ${x(d.minute)},${y(d.prob)}`).join(" ") +
@@ -57,9 +56,21 @@ function WinProbChart({ data, keyEvents, keyMoments }) {
 
   const lastProb = data[data.length - 1].prob;
 
+  // 분별 이벤트 맵 생성
+  const eventsByMinute = {};
+  (keyEvents || []).forEach((e) => {
+    if (!eventsByMinute[e.minute]) eventsByMinute[e.minute] = [];
+    eventsByMinute[e.minute].push(e);
+  });
+
   return (
-    <div className="space-y-3">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg" style={{ background: "#0f172a" }}>
+    <div className="relative space-y-1">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full rounded-lg"
+        style={{ background: "#0f172a" }}
+        onMouseLeave={() => setTooltip(null)}
+      >
         <defs>
           <linearGradient id="winAreaGrad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
@@ -79,12 +90,9 @@ function WinProbChart({ data, keyEvents, keyMoments }) {
           </g>
         ))}
 
-
-
         {/* 주요 관전 포인트 강조 */}
         {(keyMoments || []).map((km, i) => (
           <g key={i}>
-            {/* 배경 강조 영역 */}
             <rect
               x={x(Math.max(0, km.minute - 2))} y={pt}
               width={x(km.minute + 2) - x(km.minute - 2)}
@@ -92,13 +100,11 @@ function WinProbChart({ data, keyEvents, keyMoments }) {
               fill={km.isPositive ? "#22c55e" : "#ef4444"}
               opacity="0.07"
             />
-            {/* 수직선 */}
             <line
               x1={x(km.minute)} y1={pt - 4} x2={x(km.minute)} y2={pt + ch}
               stroke={km.isPositive ? "#22c55e" : "#ef4444"}
               strokeWidth="2"
             />
-            {/* 레이블 박스 */}
             <rect
               x={Math.min(x(km.minute) - 28, W - 62)} y={pt - 19}
               width="56" height="16" rx="3"
@@ -110,7 +116,6 @@ function WinProbChart({ data, keyEvents, keyMoments }) {
             >
               {km.minute}분 {km.isPositive ? "▲" : "▼"}
             </text>
-            {/* 해당 지점 원 */}
             <circle
               cx={x(km.minute)} cy={y(km.prob)} r="5"
               fill={km.isPositive ? "#22c55e" : "#ef4444"}
@@ -124,10 +129,27 @@ function WinProbChart({ data, keyEvents, keyMoments }) {
         {/* 선 */}
         <polyline points={points} fill="none" stroke="#60a5fa" strokeWidth="2.5" strokeLinejoin="round" />
 
+        {/* 호버 포인트 - 각 분마다 투명 원으로 마우스 감지 */}
+        {data.map((d) => {
+          const cx = x(d.minute);
+          const cy = y(d.prob);
+          const eventsHere = eventsByMinute[d.minute] || [];
+          const isHovered = tooltip?.minute === d.minute;
+          return (
+            <circle
+              key={d.minute}
+              cx={cx} cy={cy}
+              r={isHovered ? 5 : 4}
+              fill={isHovered ? "#ffffff" : "transparent"}
+              stroke={isHovered ? "#60a5fa" : "transparent"}
+              strokeWidth="1.5"
+              style={{ cursor: eventsHere.length > 0 ? "pointer" : "default" }}
+              onMouseEnter={() => setTooltip({ minute: d.minute, prob: d.prob, cx, cy, events: eventsHere })}
+            />
+          );
+        })}
+
         {/* 시작/끝 포인트 */}
-        {/* ✅ 수정: x(0) → x(data[0].minute)
-            서버가 4분부터 데이터를 보낼 때 x(0)에 원을 찍으면
-            실제 선과 분리된 고립된 점이 0분 위치에 생겼음 */}
         <circle cx={x(data[0].minute)} cy={y(data[0].prob)} r="3" fill="#60a5fa" />
         <circle cx={x(maxMin)} cy={y(lastProb)} r="5"
           fill={lastProb >= 50 ? "#22c55e" : "#f87171"} />
@@ -150,16 +172,42 @@ function WinProbChart({ data, keyEvents, keyMoments }) {
         </text>
       </svg>
 
-      {/* 범례 */}
-      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-500 px-1">
-        {(keyEvents || []).slice().sort((a,b) => a.minute - b.minute).map((e, i) => (
-          <div key={i} className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm"
-              style={{ background: e.isBlue ? "#3b82f6" : "#ef4444" }} />
-            <span>{e.minute}분 {e.label}{e.showTeam ? `(${e.isBlue ? "블루팀" : "레드팀"})` : ""}</span>
+      {/* 툴팁 - SVG 바깥 absolute 포지션 */}
+      {tooltip && (
+        <div
+          className="absolute z-50 pointer-events-none"
+          style={{
+            // SVG가 w-full이라 실제 픽셀 비율로 변환
+            left: `calc(${(tooltip.cx / W) * 100}% - 80px)`,
+            top: `calc(${(tooltip.cy / H) * 100}% - 8px)`,
+            transform: "translateY(-100%)",
+          }}
+        >
+          <div className="bg-slate-900 border border-slate-600 rounded-lg shadow-xl p-2.5 min-w-[160px] max-w-[220px]">
+            <div className="flex items-center justify-between mb-1.5 pb-1.5 border-b border-slate-700">
+              <span className="text-xs font-bold text-white">{tooltip.minute}분</span>
+              <span className="text-xs font-bold text-blue-400">{tooltip.prob}%</span>
+            </div>
+            {tooltip.events.length === 0 ? (
+              <p className="text-xs text-slate-400">이벤트 없음</p>
+            ) : (
+              <ul className="space-y-1">
+                {tooltip.events.map((e, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-xs">
+                    <span
+                      className="mt-0.5 w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ background: e.isBlue ? "#3b82f6" : "#ef4444" }}
+                    />
+                    <span className="text-slate-300 leading-tight">
+                      {e.label}{e.showTeam ? ` (${e.isBlue ? "블루" : "레드"})` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

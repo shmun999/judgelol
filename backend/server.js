@@ -444,13 +444,26 @@ app.get("/api/riot/summoner", async (req, res) => {
     const account = await accountRes.json();
     const puuid = account.puuid;
 
-    // 2. 최근 10경기 조회 (queue 구분 없이)
-    const matchIdsRes = await fetch(
-      `https://asia.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?count=10`,
-      { headers: { "X-Riot-Token": RIOT_KEY } }
-    );
-    const matchIds = await matchIdsRes.json();
-    if (!Array.isArray(matchIds) || matchIds.length === 0) {
+    // 2. 최근 10경기 조회 (소환사의 협곡만: 개인/2인랭크 420, 자유랭크 440, 일반 400/430)
+    // 각 queueId별로 조회 후 합쳐서 최근 10개 추출
+    const QUEUE_IDS = [420, 440, 400, 430];
+    const allMatchIds = (await Promise.all(
+      QUEUE_IDS.map(async (queueId) => {
+        const res = await fetch(
+          `https://asia.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=${queueId}&count=10`,
+          { headers: { "X-Riot-Token": RIOT_KEY } }
+        );
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+      })
+    )).flat();
+
+    // 중복 제거 후 최근 10개 (matchId 내림차순 정렬)
+    const matchIds = [...new Set(allMatchIds)]
+      .sort((a, b) => b.localeCompare(a))
+      .slice(0, 10);
+
+    if (matchIds.length === 0) {
       return res.status(404).json({ error: "최근 게임 기록이 없습니다." });
     }
 
@@ -607,7 +620,7 @@ app.get("/api/riot/summoner", async (req, res) => {
           });
         }
 
-        // LSTM 승률 예측
+        // Transformer 승률 예측
         let winProbability = [];
         try {
           const predictRes = await fetch("http://localhost:5001/predict", {
@@ -662,7 +675,7 @@ app.get("/api/riot/summoner", async (req, res) => {
   }
 });
 
-// ─── LSTM 승률 예측 ──────────────────────────────────
+// ─── Trnasformer 승률 예측 ──────────────────────────────────
 app.post("/api/predict/winrate", async (req, res) => {
   const { frames } = req.body;
   if (!frames || frames.length === 0) {

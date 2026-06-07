@@ -554,7 +554,7 @@ function AnalysisCard({ analysis, onClick }) {
 }
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────
-export default function ComingSoonPage({ title }) {
+export default function ShopPage() {
   const navigate = useNavigate();
 
   // App.jsx에서 localStorage 기반으로 전달되지 않으므로 직접 읽기
@@ -563,6 +563,7 @@ export default function ComingSoonPage({ title }) {
   const userEmail = savedUser?.email || "";
   const [points, setPoints] = useState(savedUser?.points ?? 0);
 
+  const [showAnalysis, setShowAnalysis] = useState(false); // 랜딩 → 게시판 전환
   const [analyses, setAnalyses] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -635,6 +636,44 @@ export default function ComingSoonPage({ title }) {
     );
   }
 
+  // ── 랜딩 화면 (상점 첫 화면) ──
+  if (!showAnalysis) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 space-y-6">
+        <div className="text-center mb-8">
+          <h2 className="font-display font-black text-3xl text-slate-800 tracking-wide mb-2">상점</h2>
+          <p className="text-slate-400 text-sm">포인트로 이용할 수 있는 서비스입니다</p>
+        </div>
+
+        {/* AI 분석 카드 */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-8 flex flex-col items-center text-center shadow-sm hover:shadow-md transition">
+          <div
+            className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5"
+            style={{ background: "linear-gradient(135deg, #3b82f6, #06b6d4)" }}
+          >
+            <BrainCircuit className="w-8 h-8 text-white" />
+          </div>
+          <h3 className="font-bold text-xl text-slate-800 mb-2">내 경기 AI 분석하기</h3>
+          <p className="text-slate-400 text-sm mb-1 leading-relaxed">
+            내가 플레이한 경기를 AI가 분석해드립니다.<br />
+            승률 변화 그래프와 주요 구간을 한눈에 확인하세요.
+          </p>
+          <div className="flex items-center gap-1.5 mt-3 mb-6 px-3 py-1.5 rounded-full bg-yellow-50 border border-yellow-200">
+            <span className="text-sm">🪙</span>
+            <span className="text-sm font-bold text-yellow-700">분석당 30포인트</span>
+          </div>
+          <button
+            onClick={() => { setShowAnalysis(true); loadAnalyses(); }}
+            className="w-full max-w-xs py-3 rounded-xl font-bold text-sm text-white transition hover:opacity-90"
+            style={{ background: "linear-gradient(135deg, #3b82f6, #06b6d4)" }}
+          >
+            내 경기 AI 분석하기
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ── 상세 보기 ──
   if (selectedId !== null) {
     return (
@@ -653,6 +692,12 @@ export default function ComingSoonPage({ title }) {
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-5">
         <div>
+          <button
+            onClick={() => setShowAnalysis(false)}
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-blue-600 font-semibold transition mb-1"
+          >
+            <ArrowLeft className="w-4 h-4" /> 상점으로
+          </button>
           <h2 className="font-display font-black text-2xl text-slate-800 tracking-wide">
             내 경기 AI 분석
           </h2>

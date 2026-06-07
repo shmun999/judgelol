@@ -695,6 +695,99 @@ app.post("/api/predict/winrate", async (req, res) => {
   }
 });
 
+// ─── AI 분석 목록 조회 (본인 것만) ─────────────────────
+app.get("/api/analyses", (req, res) => {
+  const { email } = req.query;
+  if (!email) return res.status(400).json({ error: "이메일이 필요합니다." });
+
+  const db = getDB();
+  const analyses = db.prepare(`
+    SELECT id, summoner_name, tag_line, champion, position_kr, win,
+           kills, deaths, assists, kda, cs, duration_str, game_date, game_id, created_at
+    FROM ai_analyses
+    WHERE user_email = ?
+    ORDER BY created_at DESC
+  `).all(email);
+
+  res.json(analyses);
+});
+
+// ─── AI 분석 상세 조회 ──────────────────────────────────
+app.get("/api/analyses/:id", (req, res) => {
+  const { email } = req.query;
+  if (!email) return res.status(400).json({ error: "이메일이 필요합니다." });
+
+  const db = getDB();
+  const analysis = db.prepare("SELECT * FROM ai_analyses WHERE id = ?").get(Number(req.params.id));
+  if (!analysis) return res.status(404).json({ error: "분석 결과를 찾을 수 없습니다." });
+  if (analysis.user_email !== email) return res.status(403).json({ error: "권한이 없습니다." });
+
+  res.json({
+    ...analysis,
+    gameData: analysis.game_data ? JSON.parse(analysis.game_data) : null,
+  });
+});
+
+// ─── AI 분석 저장 (30포인트 차감) ──────────────────────
+app.post("/api/analyses", (req, res) => {
+  const { email, gameData } = req.body;
+  if (!email || !gameData) return res.status(400).json({ error: "필수 정보가 없습니다." });
+
+  const db = getDB();
+
+  // 포인트 확인 및 차감
+  const user = db.prepare("SELECT points FROM users WHERE email = ?").get(email);
+  if (!user || user.points < 30) {
+    return res.status(400).json({ error: "포인트가 부족합니다. (AI 분석: 30포인트 필요)" });
+  }
+
+  // 같은 게임 중복 분석 방지
+  const dup = db.prepare("SELECT id FROM ai_analyses WHERE user_email = ? AND game_id = ?").get(email, gameData.gameId);
+  if (dup) return res.status(400).json({ error: "이미 분석된 경기입니다.", id: dup.id });
+
+  db.prepare("UPDATE users SET points = points - 30 WHERE email = ?").run(email);
+
+  const result = db.prepare(`
+    INSERT INTO ai_analyses
+      (user_email, summoner_name, tag_line, champion, position_kr, win,
+       kills, deaths, assists, kda, cs, duration_str, game_date, game_id, game_data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    email,
+    gameData.summonerName,
+    gameData.tagLine,
+    gameData.champion,
+    gameData.positionKr,
+    gameData.win ? 1 : 0,
+    gameData.kills,
+    gameData.deaths,
+    gameData.assists,
+    gameData.kda,
+    gameData.cs,
+    gameData.durationStr,
+    gameData.date,
+    gameData.gameId,
+    JSON.stringify(gameData)
+  );
+
+  const updatedUser = db.prepare("SELECT points FROM users WHERE email = ?").get(email);
+  res.json({ id: result.lastInsertRowid, points: updatedUser.points, message: "AI 분석이 저장되었습니다." });
+});
+
+// ─── AI 분석 삭제 ────────────────────────────────────────
+app.delete("/api/analyses/:id", (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "이메일이 필요합니다." });
+
+  const db = getDB();
+  const analysis = db.prepare("SELECT * FROM ai_analyses WHERE id = ?").get(Number(req.params.id));
+  if (!analysis) return res.status(404).json({ error: "분석 결과를 찾을 수 없습니다." });
+  if (analysis.user_email !== email) return res.status(403).json({ error: "권한이 없습니다." });
+
+  db.prepare("DELETE FROM ai_analyses WHERE id = ?").run(Number(req.params.id));
+  res.json({ message: "삭제되었습니다." });
+});
+
 app.listen(PORT, () => {
   console.log(`✅ 서버 실행 중: http://localhost:${PORT}`);
   console.log(`📁 DB 저장 위치: db.sqlite`);

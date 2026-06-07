@@ -8,7 +8,7 @@ import PostsPage from "./pages/PostsPage";
 import DetailPage from "./pages/DetailPage";
 import LoginPage from "./pages/LoginPage";
 import WritePage from "./pages/WritePage";
-import ComingSoonPage from "./pages/ComingSoonPage";
+import ShopPage from "./pages/ShopPage";
 import MyPage from "./pages/MyPage";
 
 const BASE_URL = "https://judgelol.com/api";
@@ -91,7 +91,7 @@ export default function App() {
             <Route path="/board" element={<PostsPage isAdmin={isAdmin} />} />
             <Route path="/board/:id" element={<DetailPage isLoggedIn={isLoggedIn} userName={userName} userEmail={userEmail} isAdmin={isAdmin} />} />
             <Route path="/write" element={<WritePage isLoggedIn={isLoggedIn} userName={userName} userEmail={userEmail} />} />
-            <Route path="/shop" element={<ComingSoonPage title="상점" />} />
+            <Route path="/shop" element={<ShopPage />} />
             <Route path="/mypage" element={
               <MyPage
                 userName={userName}

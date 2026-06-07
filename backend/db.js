@@ -97,6 +97,26 @@ function initTables() {
       UNIQUE(comment_id, user_email),
       FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS ai_analyses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_email TEXT NOT NULL,
+      summoner_name TEXT NOT NULL,
+      tag_line TEXT NOT NULL,
+      champion TEXT NOT NULL,
+      position_kr TEXT,
+      win INTEGER NOT NULL,
+      kills INTEGER,
+      deaths INTEGER,
+      assists INTEGER,
+      kda TEXT,
+      cs INTEGER,
+      duration_str TEXT,
+      game_date TEXT,
+      game_id TEXT,
+      game_data TEXT NOT NULL,
+      created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    );
   `);
 }
 

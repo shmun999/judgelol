@@ -84,3 +84,24 @@ export const closePost = (postId, userEmail, finalOpinion, correctOptionId) =>
       correct_option_id: correctOptionId,
     }),
   }).then((r) => r.json());
+
+// ─── AI 분석 ──────────────────────────────────────────
+export const getAnalyses = (email) =>
+  fetch(`${BASE_URL}/analyses?email=${encodeURIComponent(email)}`).then((r) => r.json());
+
+export const getAnalysis = (id, email) =>
+  fetch(`${BASE_URL}/analyses/${id}?email=${encodeURIComponent(email)}`).then((r) => r.json());
+
+export const saveAnalysis = (email, gameData) =>
+  fetch(`${BASE_URL}/analyses`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, gameData }),
+  }).then((r) => r.json());
+
+export const deleteAnalysis = (id, email) =>
+  fetch(`${BASE_URL}/analyses/${id}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  }).then((r) => r.json());
